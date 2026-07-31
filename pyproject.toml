@@ -1,0 +1,13 @@
+[project]
+name = "funding-blotter"
+version = "0.1.0"
+description = "Daily funding-round aggregator for NYC AI/fintech job targeting"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "feedparser==6.0.11",
+    "requests==2.32.3",
+    "beautifulsoup4==4.12.3",
+    "PyYAML==6.0.2",
+    "python-dotenv>=1.2.2",
+]

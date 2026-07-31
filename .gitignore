@@ -1,0 +1,13 @@
+# Secrets
+.env
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# NOTE: data/deals.db is intentionally committed — it is the pipeline's memory
+# across ephemeral GitHub Actions runners. Do NOT ignore it.

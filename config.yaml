@@ -1,0 +1,140 @@
+# Funding Blotter configuration
+# Everything you'd want to tune lives here. No code changes needed.
+
+sources:
+  finsmes:
+    enabled: true
+    # FinSMEs' /feed and /wp-json endpoints are WAF-blocked (403), but the
+    # rendered category and article pages serve normally. The finsmes adapter
+    # lists a category page, then fetches each post for its templated body.
+    kind: finsmes
+    urls:
+      - https://www.finsmes.com/category/usa
+    # Cap posts fetched per listing, and pace the per-article requests.
+    article_limit: 30
+    article_delay: 0.4
+    # FinSMEs uses a rigid sentence template, so the regex fast path
+    # handles most of its entries without spending any LLM tokens.
+    template_hint: finsmes
+
+  aifunding_me:
+    enabled: true
+    kind: html
+    # VERIFY ON FIRST RUN. This site is not WordPress and has no confirmed
+    # feed, so the adapter probes for a JSON endpoint before falling back
+    # to HTML. Run `python -m src.main --probe aifunding_me` to see what it
+    # actually finds and adjust the selectors below.
+    urls:
+      - https://aifunding.me/deals
+    json_probe:
+      - https://aifunding.me/api/deals
+      - https://aifunding.me/deals.json
+    selectors:
+      row: "table tbody tr, [class*='deal-row'], [class*='deal-card']"
+      link: "a"
+    template_hint: generic
+
+extraction:
+  provider: groq
+  base_url: https://api.groq.com/openai/v1
+  # Simple field extraction from templated text. The 8B model is more than
+  # enough and has the most headroom on the free tier. Swap to
+  # openai/gpt-oss-120b or llama-3.3-70b-versatile if you see bad parses.
+  model: llama-3.1-8b-instant
+  # Free tier is TPM-limited (~6k/min), so batch and pace rather than
+  # firing one request per article.
+  batch_size: 8
+  chars_per_item: 700
+  seconds_between_calls: 6
+  max_retries: 4
+  # Regex handles FinSMEs' template locally and skips the LLM for those.
+  # Set false to send every item through the model instead.
+  regex_fastpath: true
+
+enrichment:
+  # Agentic sector filter. For each company the LLM is given a web_search tool;
+  # it looks up what the company does (via Tavily), then labels it. Only the
+  # keep_labels below survive — everything else is dropped from the blotter.
+  # Classifications are cached in the DB so daily runs don't re-spend.
+  enabled: true
+  provider: tavily
+  max_results: 3
+  # Pause between per-company tool-call loops (rate-limit headroom).
+  seconds_between_searches: 1.0
+  keep_labels:
+    - ai_fintech
+    - fintech
+    - financial_services
+    - enabler
+
+filters:
+  # Soft ranking on top of the hard enrichment filter. Non-matches that still
+  # passed enrichment are stored; priority flags sector+location hits.
+  priority_sectors:
+    - fintech
+    - financial
+    - capital markets
+    - trading
+    - asset management
+    - banking
+    - payments
+    - wealth
+    - insurance
+    - risk
+    - compliance
+    - kyc
+    - aml
+    - quant
+    - artificial intelligence
+    - machine learning
+    - agentic
+    - llm
+    - data infrastructure
+    - securities
+    - finance
+    - brokerage
+    - custody
+    - clearing
+    - settlement
+    - market making
+    - execution
+    - fixed income
+    - derivatives
+    - treasury
+    - lending
+    - underwriting
+  priority_locations:
+    - new york
+    - nyc
+    - ny
+    - brooklyn
+    - manhattan
+  # Rounds matching these are stored but pushed to the bottom and dimmed.
+  # Biotech is the bulk of FinSMEs' volume and almost never relevant to you.
+  deprioritize:
+    - biotech
+    - biotechnology
+    - therapeutics
+    - pharmaceutical
+    - clinical-stage
+    - oncology
+    - medical device
+    - diagnostics
+    - vaccine
+    - cannabis
+    - real estate
+    - restaurant
+    - apparel
+    - beverage
+
+output:
+  html_path: docs/index.html
+  csv_path: data/deals.csv
+  # How many days of history the page shows.
+  window_days: 30
+
+store:
+  db_path: data/deals.db
+  # Two sources reporting the same round within this many days are treated
+  # as one deal.
+  dedupe_window_days: 21
