@@ -10,8 +10,12 @@ Labels:
   ai_fintech         - AI-native product whose primary use case is finance / fintech
   fintech            - builds financial technology products
   financial_services - is itself a bank / broker / asset manager / insurer / ...
-  enabler            - primarily sells to or enables financial institutions
-  unrelated          - none of the above (dropped)
+  enabler            - sells to or enables financial institutions / finance workflows
+  unrelated          - no meaningful finance focus (dropped)
+
+Bias: when evidence shows a real finance product or FI customer base, KEEP
+(enabler/fintech/ai_fintech) rather than dropping as unrelated. Still reject
+biotech, sports, consumer, and generic enterprise AI with no finance signal.
 
 Classifications are cached per company in the DB (company_sector table) so a
 daily run never re-searches or re-spends on a company it has already seen.
@@ -60,30 +64,46 @@ WEB_SEARCH_TOOL = {
 }
 
 CLASSIFY_SYSTEM = """You classify companies by their relationship to the \
-financial sector. You have a web_search tool — call it to learn what the \
-company actually does before deciding.
+financial sector for a fintech / AI-fintech job-targeting blotter. You have a \
+web_search tool — call it before deciding when the article is thin or ambiguous.
+
+KEEP anything that is clearly in, selling to, or building for finance. Do NOT \
+drop a company just because it also mentions AI, security, data, or enterprise.
 
 Labels (choose exactly one — prefer the most specific):
-  ai_fintech          - AI is core to the product AND the primary use case is \
-finance/fintech (e.g. AI trading, AI lending underwriting, AI-native banking \
-compliance, agentic finance workflows). Prefer this over fintech/enabler when \
-both AI and finance are central.
-  fintech             - builds financial technology products (payments, \
-lending, trading, wealth, banking software, crypto, insurtech, capital markets) \
-where AI is not the defining feature.
-  financial_services  - is itself a financial institution or service: bank, \
-broker-dealer, exchange, asset/investment manager, insurer, lender, fund.
-  enabler             - NOT itself finance, but PRIMARILY sells to or enables \
-financial institutions: e.g. KYC/AML for banks, payments compliance, trading \
-risk, market data for brokers. Use this (not ai_fintech) when the product is \
-general infra that happens to serve banks.
-  unrelated           - none of the above (biotech, consumer goods, space, \
-generic staffing, restaurants, generic security/devtools, general enterprise \
-AI/data platforms with no clear finance focus).
+  ai_fintech          - AI/ML/agents are core AND the product is for finance: \
+banking, payments, lending, credit, trading, capital markets, wealth, insurance, \
+treasury, risk, compliance/KYC/AML for FIs, brokerage, custody, fintech ops.
+  fintech             - financial technology products (payments, lending, \
+banking software/OS, crypto/stablecoin rails, insurtech, wealthtech, embedded \
+finance, BaaS, card issuing, securities finance) where AI is not the headline.
+  financial_services  - is itself a bank, broker-dealer, exchange, asset/ \
+investment manager, insurer, lender, credit fund, or similar FI.
+  enabler             - not a bank/fintech brand, but clearly enables FIs or \
+finance workflows as a primary market: RegTech, market data for trading, \
+fraud/risk for banks, compliance platforms for financial institutions, \
+fintech infrastructure, AI tools sold mainly into banks/insurers/asset managers.
+  unrelated           - no meaningful finance focus: biotech/pharma, consumer \
+CPG, restaurants, apparel, sports/entertainment talent, space/defense hardware, \
+generic staffing, clinical tools, or general enterprise AI/security/data with \
+NO clear finance product or FI customer focus.
 
-Be strict: serving "Fortune 500" or "enterprises including banks" is not enough \
-— the primary customer must be financial. Incidental finance mentions do not \
-count. After you have enough \
+Inclusion rules (prefer keep over drop when these hold):
+  - Primary customers are banks, credit unions, insurers, brokers, asset managers, \
+hedge funds, fintechs, payments companies, or capital-markets firms.
+  - Product is payments, lending, credit, banking, trading, wealth, insurance, \
+treasury, clearing/settlement, custody, or financial compliance.
+  - Agentic/AI platforms purpose-built for financial institutions or finance ops.
+  - Private credit, alternative investments, or advisor/RIA platforms.
+
+Exclusion rules (unrelated):
+  - Only incidental "we also serve banks" among many industries, with no finance \
+product.
+  - Sports, media, restaurants, biotech, climate hardware, generic DevTools.
+  - Cybersecurity or data platforms with no finance-specific product or FI focus.
+
+When search evidence is mixed but a finance use case is real and material, \
+choose enabler or ai_fintech — do not mark unrelated. After you have enough \
 information, reply with JSON only (no markdown fences):
 {"label": "<label>", "reason": "<under 15 words>"}"""
 

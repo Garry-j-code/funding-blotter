@@ -187,14 +187,22 @@ After extraction, each **new** company goes through an agentic step:
 
 | Label | Meaning |
 |---|---|
-| `ai_fintech` | AI is core **and** primary use case is finance |
+| `ai_fintech` | AI/agents core **and** product is for finance |
 | `fintech` | Financial technology product |
 | `financial_services` | Bank, broker, asset manager, insurer, etc. |
-| `enabler` | Primarily sells to / enables financial institutions |
-| `unrelated` | Dropped (biotech, consumer, space, generic enterprise AI, …) |
+| `enabler` | Enables FIs / finance workflows (RegTech, market data, bank-focused AI) |
+| `unrelated` | Dropped (biotech, sports, consumer, generic enterprise with no finance signal) |
+
+Bias: stay finance/fintech-focused, but **prefer keep** when there is a clear
+finance product or FI customer base (including private credit, payments, wealth,
+insurance, compliance for banks). Don’t drop agentic AI built for financial
+institutions.
 
 Classifications are cached in the `company_sector` table so daily runs don’t
 re-search companies already seen. Use `--no-enrich` to skip this filter.
+To re-check companies previously marked `unrelated` after tightening/loosening
+the classifier, delete those rows from `company_sector` (or clear that label)
+and re-run.
 
 ---
 
@@ -343,8 +351,9 @@ Full install steps: [docs/SETUP_RUNNER.md](docs/SETUP_RUNNER.md).
 - **aifunding.me** is enabled but unverified; often returns zero rows.
 - **FX rates** in `parse_amount` are approximate (sorting only).
 - **Entity resolution** is string normalization only — rebrands can duplicate.
-- **Enrichment is strict but not perfect**; borderline “enterprise AI that also
-  sells to banks” cases can be mislabeled. Cache entries live in `company_sector`.
+- **Enrichment prefers keep** when finance use case / FI customers are clear;
+  still drops biotech, sports, consumer, and generic enterprise with no finance
+  signal. Cache entries live in `company_sector`.
 - Groq / Tavily free tiers have rate limits; the daily run is paced accordingly.
 
 ---

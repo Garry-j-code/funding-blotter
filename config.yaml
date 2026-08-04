@@ -103,6 +103,13 @@ filters:
     - treasury
     - lending
     - underwriting
+    - private credit
+    - regtech
+    - wealthtech
+    - insurtech
+    - embedded finance
+    - neobank
+    - stablecoin
   priority_locations:
     - new york
     - nyc
@@ -126,6 +133,11 @@ filters:
     - restaurant
     - apparel
     - beverage
+    - sports
+    - entertainment
+    - staffing
+    - aerospace
+    - satellite
 
 output:
   html_path: docs/index.html
