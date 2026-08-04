@@ -8,7 +8,7 @@ are kept. Everything else is dropped.
 
 Labels:
   ai_fintech         - AI-native product whose primary use case is finance / fintech
-  fintech            - builds financial technology products (not primarily AI)
+  fintech            - builds financial technology products
   financial_services - is itself a bank / broker / asset manager / insurer / ...
   enabler            - primarily sells to or enables financial institutions
   unrelated          - none of the above (dropped)
