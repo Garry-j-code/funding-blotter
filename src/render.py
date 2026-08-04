@@ -32,19 +32,25 @@ body {
   margin: 0; background: var(--ledger); color: var(--ink);
   font-family: Newsreader, Georgia, serif;
   font-size: 16px; line-height: 1.45;
+  overflow-x: hidden;
 }
-.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 96px; }
+.wrap {
+  max-width: 1080px; margin: 0 auto;
+  padding: 0 24px 96px;
+  width: 100%;
+}
 
 /* Masthead */
 .mast { padding: 40px 0 0; }
 .mast h1 {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 13px; font-weight: 600; letter-spacing: 0.22em;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.18em;
   text-transform: uppercase; margin: 0 0 6px;
 }
 .mast .sub {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px; color: var(--muted); letter-spacing: 0.06em;
+  font-size: 11px; color: var(--muted); letter-spacing: 0.04em;
+  line-height: 1.6; word-break: break-word;
 }
 .mast .sub b { color: var(--ink); font-weight: 500; }
 .rule { height: 1px; background: var(--ink); margin: 18px 0 0; }
@@ -52,14 +58,24 @@ body {
 
 /* Controls */
 .controls {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  display: flex; flex-direction: column; gap: 10px;
   padding: 14px 0; border-bottom: 1px solid var(--rule);
   position: sticky; top: 0; background: var(--ledger); z-index: 5;
+}
+.chips {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-left: auto;
 }
 .chip {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
   letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 5px 11px; border: 1px solid var(--rule); border-radius: 0;
+  padding: 6px 11px; border: 1px solid var(--rule); border-radius: 0;
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .chip:hover { border-color: var(--ink); color: var(--ink); }
@@ -71,67 +87,89 @@ body {
 }
 .fetch-btn {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 5px 11px; border: 1px solid var(--ink); border-radius: 0;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 11px; border: 1px solid var(--ink); border-radius: 0;
   background: var(--ink); color: var(--ledger); cursor: pointer;
-  margin-left: auto;
+  white-space: nowrap;
 }
 .fetch-btn:hover { opacity: 0.88; }
 .fetch-btn:disabled { opacity: 0.45; cursor: wait; }
 .token-btn {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
   letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 5px 9px; border: 1px solid var(--rule); background: transparent;
-  color: var(--muted); cursor: pointer;
+  padding: 6px 9px; border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); cursor: pointer; white-space: nowrap;
 }
 .token-btn:hover { border-color: var(--ink); color: var(--ink); }
 #fetch-status {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  color: var(--muted); width: 100%; margin-top: 2px; min-height: 1.2em;
+  color: var(--muted); line-height: 1.45; min-height: 0;
+  word-break: break-word;
 }
+#fetch-status:empty { display: none; }
 #fetch-status.ok { color: var(--credit); }
 #fetch-status.err { color: var(--flag); }
 #q {
   font-family: 'IBM Plex Mono', monospace; font-size: 12px;
-  padding: 5px 9px; border: 1px solid var(--rule); background: var(--card);
-  color: var(--ink); min-width: 190px;
+  padding: 7px 10px; border: 1px solid var(--rule); background: var(--card);
+  color: var(--ink); flex: 1 1 180px; min-width: 0; max-width: 100%;
 }
 #q::placeholder { color: var(--muted); }
 
 /* Date groups */
 .daybar {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
   padding: 26px 0 8px; display: flex; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; align-items: baseline;
 }
 
-/* Deal row: the gutter rail is the signature element */
+/* Deal row */
 .deal {
   display: grid;
-  grid-template-columns: 3px 1fr 108px 92px;
-  gap: 0 18px; align-items: start;
-  padding: 13px 0; border-bottom: 1px solid var(--rule);
+  grid-template-columns: 3px minmax(0, 1fr);
+  gap: 0 16px; align-items: stretch;
+  padding: 14px 0; border-bottom: 1px solid var(--rule);
 }
-.gutter { background: var(--rule); align-self: stretch; }
+.gutter { background: var(--rule); min-height: 100%; }
 .deal.pri .gutter { background: var(--flag); }
 .deal.dim { opacity: 0.42; }
 .deal:hover { background: var(--card); }
 
-.name { font-size: 19px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+.body { min-width: 0; }
+.headline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 20px; align-items: start;
+}
+.name {
+  font-size: 19px; font-weight: 600; line-height: 1.25;
+  letter-spacing: -0.01em; overflow-wrap: anywhere;
+}
 .name a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--rule); }
 .name a:hover { border-bottom-color: var(--ink); }
-.desc { color: var(--muted); font-size: 14.5px; margin-top: 3px; }
+.figures {
+  text-align: right; flex-shrink: 0;
+  padding-top: 2px;
+}
+.desc {
+  color: var(--muted); font-size: 14.5px; margin-top: 4px;
+  overflow-wrap: anywhere;
+}
 .meta {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
-  color: var(--muted); margin-top: 6px; letter-spacing: 0.03em;
+  color: var(--muted); margin-top: 8px; letter-spacing: 0.02em;
+  display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+  overflow-wrap: anywhere;
 }
+.meta .sep { color: var(--rule); }
 .meta .inv { color: var(--ink); }
 .meta .sector {
-  color: var(--credit); border: 1px solid var(--rule); border-radius: 2px;
-  padding: 1px 6px; letter-spacing: 0.05em; white-space: nowrap;
+  color: var(--credit); border: 1px solid var(--rule);
+  padding: 1px 6px; letter-spacing: 0.04em; white-space: nowrap;
 }
 .meta .src {
-  color: var(--muted); letter-spacing: 0.06em;
+  color: var(--muted); letter-spacing: 0.04em;
   text-decoration: none; border-bottom: 1px solid var(--rule);
 }
 a.src:hover { color: var(--ink); border-bottom-color: var(--ink); }
@@ -139,14 +177,14 @@ a.src:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 
 .amt {
   font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;
-  font-size: 16px; font-weight: 500; text-align: right; color: var(--credit);
-  padding-top: 2px;
+  font-size: 16px; font-weight: 500; color: var(--credit);
+  white-space: nowrap;
 }
 .amt.nd { color: var(--muted); font-weight: 400; }
 .stage {
   font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
-  text-align: right; padding-top: 6px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  margin-top: 4px; white-space: nowrap;
 }
 .deal.pri .stage { color: var(--flag); }
 
@@ -156,16 +194,33 @@ a.src:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 }
 .foot {
   font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
-  color: var(--muted); padding-top: 28px; letter-spacing: 0.05em;
+  color: var(--muted); padding-top: 28px; letter-spacing: 0.03em;
+  line-height: 1.6; overflow-wrap: anywhere;
 }
 
 @media (max-width: 720px) {
-  .wrap { padding: 0 16px 64px; }
-  .deal { grid-template-columns: 3px 1fr; gap: 0 14px; }
-  .amt, .stage { text-align: left; padding: 6px 0 0; }
-  .amt { font-size: 15px; }
-  .stage { grid-column: 2; }
-  #q, .fetch-btn { margin-left: 0; width: 100%; }
+  .wrap { padding: 0 14px 56px; }
+  .mast { padding-top: 28px; }
+  .mast h1 { letter-spacing: 0.12em; font-size: 12px; }
+  .mast .sub { font-size: 10.5px; }
+  .controls { gap: 8px; padding: 12px 0; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .actions { margin-left: 0; width: 100%; }
+  .actions .fetch-btn, .actions .token-btn { flex: 1 1 auto; text-align: center; }
+  #q { flex: 1 1 auto; width: 100%; min-width: 0; }
+  .headline {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .figures {
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 8px 14px; text-align: left; padding-top: 0;
+  }
+  .stage { margin-top: 0; }
+  .name { font-size: 17px; }
+  .desc { font-size: 14px; }
+  .daybar { letter-spacing: 0.06em; padding-top: 20px; }
+  .deal { gap: 0 12px; padding: 12px 0; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -239,7 +294,7 @@ function render() {
         ? `<a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.company)}</a>`
         : esc(d.company);
       const bits = [];
-      if (d.location) bits.push(esc(d.location));
+      if (d.location) bits.push(`<span>${esc(d.location)}</span>`);
       const sec = sectorLabel(d.sector_label);
       if (sec) bits.push(`<span class="sector" title="${esc(d.sector_reason || '')}">${esc(sec)}</span>`);
       if (d.investors) bits.push(`<span class="inv">${esc(d.investors)}</span>`);
@@ -250,13 +305,17 @@ function render() {
       const amt = fmt(d.amount_usd, d.amount_raw);
       return `<div class="${cls}" style="animation-delay:${Math.min(i * 14, 260)}ms">
         <div class="gutter"></div>
-        <div>
-          <div class="name">${name}</div>
+        <div class="body">
+          <div class="headline">
+            <div class="name">${name}</div>
+            <div class="figures">
+              <div class="amt${d.amount_usd == null ? ' nd' : ''}">${esc(amt)}</div>
+              <div class="stage">${esc(d.stage || '')}</div>
+            </div>
+          </div>
           ${d.description ? `<div class="desc">${esc(d.description)}</div>` : ''}
-          <div class="meta">${bits.join(' &nbsp;·&nbsp; ')}</div>
+          <div class="meta">${bits.join('')}</div>
         </div>
-        <div class="amt${d.amount_usd == null ? ' nd' : ''}">${esc(amt)}</div>
-        <div class="stage">${esc(d.stage || '')}</div>
       </div>`;
     }).join('');
 
@@ -384,13 +443,19 @@ TEMPLATE = """<!DOCTYPE html>
   </header>
 
   <div class="controls">
-    <button class="chip" data-mode="all" aria-pressed="true">All</button>
-    <button class="chip" data-mode="priority" aria-pressed="false">Flagged</button>
-    <button class="chip" data-mode="early" aria-pressed="false">Seed &amp; A</button>
-    <button class="chip" data-mode="disclosed" aria-pressed="false">Disclosed</button>
-    <input id="q" type="search" placeholder="company, investor, city" aria-label="Search rounds">
-    <button type="button" class="fetch-btn" id="fetch-today" title="Run the daily scrape on your Mac self-hosted runner">Fetch today's deals</button>
-    <button type="button" class="token-btn" id="set-token" title="Store a GitHub PAT in this browser only">Set token</button>
+    <div class="chips">
+      <button class="chip" data-mode="all" aria-pressed="true">All</button>
+      <button class="chip" data-mode="priority" aria-pressed="false">Flagged</button>
+      <button class="chip" data-mode="early" aria-pressed="false">Seed &amp; A</button>
+      <button class="chip" data-mode="disclosed" aria-pressed="false">Disclosed</button>
+    </div>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="company, investor, city" aria-label="Search rounds">
+      <div class="actions">
+        <button type="button" class="fetch-btn" id="fetch-today" title="Run the daily scrape on your Mac self-hosted runner">Fetch today's deals</button>
+        <button type="button" class="token-btn" id="set-token" title="Store a GitHub PAT in this browser only">Set token</button>
+      </div>
+    </div>
     <div id="fetch-status" aria-live="polite"></div>
   </div>
 
