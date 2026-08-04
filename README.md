@@ -33,9 +33,10 @@ instead.
 8. [Rendering](#rendering)
 9. [Config reference](#config-reference)
 10. [CLI reference](#cli-reference)
-11. [Deployment](#deployment)
-12. [Known limitations](#known-limitations)
-13. [Gotchas](#gotchas)
+11. [Backfill missed days](#backfill-missed-days)
+12. [Deployment](#deployment)
+13. [Known limitations](#known-limitations)
+14. [Gotchas](#gotchas)
 
 ---
 
@@ -121,6 +122,7 @@ callable.
 | `src/store.py` | SQLite, dedupe, priority scoring |
 | `src/render.py` | Self-contained blotter HTML + CSV |
 | `src/main.py` | CLI + orchestration |
+| `src/backfill.py` | Recover missed date ranges via FinSMEs search listings |
 | `config.yaml` | Sources, models, filters, paths |
 | `data/deals.db` | Committed on purpose (pipeline memory across Actions) |
 | `.github/workflows/daily.yml` | Scheduled daily build + commit |
@@ -254,6 +256,43 @@ uv run python -m src.main -v              # DEBUG logging
 ```
 
 Exit codes: `0` success, `1` no items fetched (or empty `--probe`).
+
+---
+
+## Backfill missed days
+
+The daily run only sees what FinSMEs’ current `/category/usa` listing still
+shows (roughly the latest ~12 posts). If the automation was down for several
+days, those older articles scroll off the listing and never get scraped.
+
+Use `src/backfill.py` to recover a date range. It scans FinSMEs’ **USA funding
+search** pages (which embed `<time datetime>`), downloads **only** articles
+inside the window, then runs the normal extract → enrich → store → render path.
+
+```bash
+# Example: recover deals published Jul 31 – Aug 3 inclusive
+uv run python -m src.backfill --from 2026-07-31 --to 2026-08-03
+
+# Options
+uv run python -m src.backfill --from 2026-07-31 --to 2026-08-03 --pages 10 --workers 5
+uv run python -m src.backfill --from 2026-07-31 --to 2026-08-03 --no-enrich
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--from` / `--to` | required | Inclusive `YYYY-MM-DD` coverage dates |
+| `--pages` | `10` | Max search-result pages to scan (stops early once listings are older than `--from`) |
+| `--workers` | `4` | Parallel article downloads |
+| `--no-enrich` | off | Skip sector filter (keep everything extracted) |
+
+**Notes**
+
+- Run this on your Mac (same as the self-hosted runner). FinSMEs returns **403**
+  from GitHub’s cloud IPs.
+- Empty days are possible — e.g. weekends may have no USA funding posts in the
+  search index (Aug 1–2 2026 had zero).
+- After a successful backfill, commit/push `data/deals.db`, `data/deals.csv`, and
+  `docs/index.html` so GitHub Pages updates (or let the next Actions run do it).
 
 ---
 
