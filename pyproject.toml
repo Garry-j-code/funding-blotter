@@ -10,5 +10,4 @@ dependencies = [
     "beautifulsoup4==4.12.3",
     "PyYAML==6.0.2",
     "python-dotenv>=1.2.2",
-    "boto3>=1.43.61",
 ]
