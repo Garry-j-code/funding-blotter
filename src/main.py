@@ -41,6 +41,15 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(fh)
 
 
+def _github_cfg(cfg: dict) -> dict:
+    out = cfg.get("output") or {}
+    return {
+        "owner": out.get("github_owner", "Garry-j-code"),
+        "repo": out.get("github_repo", "funding-blotter"),
+        "workflow": out.get("workflow_file", "daily.yml"),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Daily funding-round blotter")
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
@@ -75,7 +84,7 @@ def main() -> int:
     if args.render_only:
         conn = store.connect(db_path)
         deals = store.recent(conn, cfg["output"]["window_days"])
-        render.write_html(deals, html_path)
+        render.write_html(deals, html_path, _github_cfg(cfg))
         render.write_csv(deals, csv_path)
         return 0
 
@@ -115,7 +124,7 @@ def main() -> int:
 
     # 5. Render
     recent = store.recent(conn, cfg["output"]["window_days"])
-    render.write_html(recent, html_path)
+    render.write_html(recent, html_path, _github_cfg(cfg))
     render.write_csv(recent, csv_path)
 
     flagged = sum(1 for d in recent if d.get("priority"))

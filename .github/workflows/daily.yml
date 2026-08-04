@@ -3,12 +3,18 @@ name: daily blotter
 on:
   schedule:
     # 03:30 UTC = 23:30 New York during EDT (22:30 during EST).
-    # GitHub cron is always UTC and can drift by a few minutes under load.
+    # Only runs if your Mac self-hosted runner is online.
     - cron: "30 3 * * *"
-  workflow_dispatch: # trigger by hand from the Actions tab
+  workflow_dispatch: # also triggered from the blotter "Fetch today's deals" button
+    inputs:
+      reason:
+        description: "Why this run was triggered"
+        required: false
+        default: "manual"
 
 permissions:
   contents: write # commit refreshed page + DB back to the repo
+  actions: read
 
 concurrency:
   group: blotter
@@ -16,12 +22,13 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Must be your Mac (home IP). GitHub-hosted runners are blocked by FinSMEs' Cloudflare.
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
@@ -45,7 +52,7 @@ jobs:
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          echo "Secrets present."
+          echo "Secrets present. Runner: $(uname -s) $(hostname)"
 
       - name: Build blotter
         env:

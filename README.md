@@ -264,13 +264,19 @@ Published at
 
 ### How it works
 
+FinSMEs blocks GitHub’s **cloud** IPs (Cloudflare bot check). The workflow
+therefore runs on a **self-hosted Mac runner** (your machine’s home IP).
+
 1. **GitHub Actions** (`.github/workflows/daily.yml`) runs daily at **03:30 UTC**
-   ≈ **11:30 PM New York (EDT)**, or on demand via **Actions → daily blotter →
-   Run workflow**.
+   ≈ **11:30 PM New York (EDT)** *if your Mac runner is online*, or on demand.
 2. The runner executes `uv run python -m src.main` with repo secrets.
-3. If `docs/index.html`, `data/deals.db`, or `data/deals.csv` changed, results
-   are committed back to `main`.
-4. **GitHub Pages** deploys from branch `main` / folder `/docs`.
+3. If outputs changed, results are committed back to `main`.
+4. **GitHub Pages** deploys from `main` / `/docs`.
+
+**On-demand from the website:** the blotter has a **Fetch today's deals**
+button. Set a GitHub PAT once (**Set token** — stored only in your browser),
+then click Fetch. Your Mac must be on with the runner listening. See
+[docs/SETUP_RUNNER.md](docs/SETUP_RUNNER.md).
 
 ### Secrets (repo Settings → Secrets and variables → Actions)
 
@@ -279,11 +285,13 @@ Published at
 | `GROQ_API_KEY` | Extraction + sector classification |
 | `TAVILY_API_KEY` | `web_search` tool backend |
 
-Direct link pattern: `https://github.com/<user>/<repo>/settings/secrets/actions`
-
 ### Pages setup
 
 Settings → Pages → **Deploy from a branch** → `main` / `/docs`.
+
+### Self-hosted runner
+
+Full install steps: [docs/SETUP_RUNNER.md](docs/SETUP_RUNNER.md).
 
 ---
 

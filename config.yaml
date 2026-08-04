@@ -132,6 +132,10 @@ output:
   csv_path: data/deals.csv
   # How many days of history the page shows.
   window_days: 30
+  # Used by the "Fetch today's deals" button on the blotter page.
+  github_owner: Garry-j-code
+  github_repo: funding-blotter
+  workflow_file: daily.yml
 
 store:
   db_path: data/deals.db

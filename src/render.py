@@ -66,13 +66,35 @@ body {
 .chip[aria-pressed="true"] {
   background: var(--ink); border-color: var(--ink); color: var(--ledger);
 }
-.chip:focus-visible, #q:focus-visible {
+.chip:focus-visible, #q:focus-visible, .fetch-btn:focus-visible, .token-btn:focus-visible {
   outline: 2px solid var(--flag); outline-offset: 2px;
 }
+.fetch-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 5px 11px; border: 1px solid var(--ink); border-radius: 0;
+  background: var(--ink); color: var(--ledger); cursor: pointer;
+  margin-left: auto;
+}
+.fetch-btn:hover { opacity: 0.88; }
+.fetch-btn:disabled { opacity: 0.45; cursor: wait; }
+.token-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 5px 9px; border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); cursor: pointer;
+}
+.token-btn:hover { border-color: var(--ink); color: var(--ink); }
+#fetch-status {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  color: var(--muted); width: 100%; margin-top: 2px; min-height: 1.2em;
+}
+#fetch-status.ok { color: var(--credit); }
+#fetch-status.err { color: var(--flag); }
 #q {
   font-family: 'IBM Plex Mono', monospace; font-size: 12px;
   padding: 5px 9px; border: 1px solid var(--rule); background: var(--card);
-  color: var(--ink); margin-left: auto; min-width: 190px;
+  color: var(--ink); min-width: 190px;
 }
 #q::placeholder { color: var(--muted); }
 
@@ -143,7 +165,7 @@ a.src:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
   .amt, .stage { text-align: left; padding: 6px 0 0; }
   .amt { font-size: 15px; }
   .stage { grid-column: 2; }
-  #q { margin-left: 0; width: 100%; }
+  #q, .fetch-btn { margin-left: 0; width: 100%; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -259,6 +281,82 @@ document.getElementById('q').addEventListener('input', e => {
   t = setTimeout(() => { state.q = e.target.value; render(); }, 120);
 });
 
+/* --- Fetch today's deals (triggers GitHub Actions on your Mac runner) --- */
+const GH = __GITHUB__;
+const TOKEN_KEY = 'funding_blotter_gh_pat';
+const actionsUrl = `https://github.com/${GH.owner}/${GH.repo}/actions/workflows/${GH.workflow}`;
+const statusEl = document.getElementById('fetch-status');
+const fetchBtn = document.getElementById('fetch-today');
+const tokenBtn = document.getElementById('set-token');
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg || '';
+  statusEl.className = cls || '';
+}
+
+tokenBtn.addEventListener('click', () => {
+  const next = prompt(
+    'Paste a GitHub Personal Access Token (classic: workflow scope, or fine-grained: Actions write).\\n' +
+    'Stored only in this browser — never in the repo. Cancel to abort. Empty + OK clears the token.'
+  );
+  if (next === null) return;
+  if (!next.trim()) {
+    localStorage.removeItem(TOKEN_KEY);
+    setStatus('Token cleared.', '');
+    return;
+  }
+  localStorage.setItem(TOKEN_KEY, next.trim());
+  setStatus('Token saved in this browser. Click Fetch today\\'s deals.', 'ok');
+});
+
+fetchBtn.addEventListener('click', async () => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) {
+    setStatus(
+      'First click “Set token”, or open Actions and click Run workflow (Mac runner must be online).',
+      'err'
+    );
+    window.open(actionsUrl, '_blank', 'noopener');
+    return;
+  }
+  fetchBtn.disabled = true;
+  setStatus('Starting fetch on your Mac runner…', '');
+  try {
+    const resp = await fetch(
+      `https://api.github.com/repos/${GH.owner}/${GH.repo}/actions/workflows/${GH.workflow}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'Authorization': `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          ref: 'main',
+          inputs: { reason: 'blotter-page-button' },
+        }),
+      }
+    );
+    if (resp.status === 204) {
+      setStatus(
+        'Fetch started. Keep your Mac awake. Refresh this page in 2–3 minutes.',
+        'ok'
+      );
+    } else {
+      const body = await resp.text();
+      setStatus(`GitHub error ${resp.status}: ${body.slice(0, 180) || resp.statusText}`, 'err');
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem(TOKEN_KEY);
+        setStatus('Token rejected — click Set token and paste a fresh PAT.', 'err');
+      }
+    }
+  } catch (err) {
+    setStatus(`Could not reach GitHub: ${err.message}`, 'err');
+  } finally {
+    fetchBtn.disabled = false;
+  }
+});
+
 render();
 """
 
@@ -291,6 +389,9 @@ TEMPLATE = """<!DOCTYPE html>
     <button class="chip" data-mode="early" aria-pressed="false">Seed &amp; A</button>
     <button class="chip" data-mode="disclosed" aria-pressed="false">Disclosed</button>
     <input id="q" type="search" placeholder="company, investor, city" aria-label="Search rounds">
+    <button type="button" class="fetch-btn" id="fetch-today" title="Run the daily scrape on your Mac self-hosted runner">Fetch today's deals</button>
+    <button type="button" class="token-btn" id="set-token" title="Store a GitHub PAT in this browser only">Set token</button>
+    <div id="fetch-status" aria-live="polite"></div>
   </div>
 
   <main id="feed"></main>
@@ -299,6 +400,8 @@ TEMPLATE = """<!DOCTYPE html>
   <p class="foot">
     Red rail = matches your sector and location filters. n/d = amount not disclosed;
     check the SEC Form D filing for the real number.
+    &nbsp;·&nbsp; <b>Fetch today's deals</b> runs the pipeline on your Mac runner
+    (FinSMEs blocks GitHub cloud IPs). Mac must be on and the runner listening.
   </p>
 </div>
 <script>__JS__</script>
@@ -307,7 +410,7 @@ TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def write_html(deals: list[dict], path: str) -> None:
+def write_html(deals: list[dict], path: str, github: dict | None = None) -> None:
     fields = (
         "company", "description", "amount_usd", "amount_raw", "stage",
         "location", "investors", "source", "url", "published_at",
@@ -315,11 +418,20 @@ def write_html(deals: list[dict], path: str) -> None:
     )
     slim = [{k: d.get(k) for k in fields} for d in deals]
     built = datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC").upper()
+    gh = github or {
+        "owner": "Garry-j-code",
+        "repo": "funding-blotter",
+        "workflow": "daily.yml",
+    }
 
     html = (
         TEMPLATE.replace("__CSS__", CSS)
         .replace("__BUILT__", built)
-        .replace("__JS__", JS.replace("__DATA__", json.dumps(slim, ensure_ascii=False)))
+        .replace(
+            "__JS__",
+            JS.replace("__DATA__", json.dumps(slim, ensure_ascii=False))
+            .replace("__GITHUB__", json.dumps(gh, ensure_ascii=False)),
+        )
     )
 
     out = Path(path)
