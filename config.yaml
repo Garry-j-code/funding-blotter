@@ -10,8 +10,13 @@ sources:
     kind: finsmes
     urls:
       - https://www.finsmes.com/category/usa
-    # Cap posts fetched per listing, and pace the per-article requests.
-    article_limit: 30
+    # Re-scan today + this many prior calendar days so afternoon posts aren't
+    # missed after a morning-only run. Pagination stops when a listing page's
+    # newest post is older than that window (day-before-yesterday at default 1).
+    lookback_days: 1
+    # Safety cap only — normal stop is date-based.
+    max_pages: 15
+    # Pause between article downloads.
     article_delay: 0.4
     # FinSMEs uses a rigid sentence template, so the regex fast path
     # handles most of its entries without spending any LLM tokens.

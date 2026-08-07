@@ -122,9 +122,9 @@ callable.
 | `src/store.py` | SQLite, dedupe, priority scoring |
 | `src/render.py` | Self-contained blotter HTML + CSV |
 | `src/main.py` | CLI + orchestration |
-| `src/backfill.py` | Recover missed date ranges via FinSMEs search listings |
+| `src/backfill.py` | Recover missed date ranges via `/category/usa` pages |
 | `config.yaml` | Sources, models, filters, paths |
-| `data/deals.db` | Committed on purpose (pipeline memory across Actions) |
+| `data/deals.db` | Committed on purpose (deals + `company_sector` + `scanned_posts`) |
 | `.github/workflows/daily.yml` | Scheduled daily build + commit |
 | `.env` | Local secrets only (git-ignored) |
 
@@ -209,8 +209,10 @@ and re-run.
 ## Dedupe and scoring
 
 **Dedupe.** Normalize company name → `company_key`. Two rows match if they share
-`company_key` + `stage` within `dedupe_window_days` (default 21). Duplicates
-gap-fill missing amount / investors / location; the **first** coverage date wins.
+the same article `url`, or `company_key` + `stage` within `dedupe_window_days`
+(default 21), or the same company in that window when one stage is vague
+(`Undisclosed`, etc.). Duplicates gap-fill missing amount / investors / location
+and prefer a concrete stage; the **first** coverage date wins.
 
 **Scoring** (soft ranking on top of the hard sector filter):
 
@@ -240,7 +242,7 @@ See `config.yaml`. Highlights:
 
 | Section | Purpose |
 |---|---|
-| `sources.finsmes` | `kind: finsmes`, category URL, `article_limit` / `article_delay` |
+| `sources.finsmes` | category URL, `lookback_days`, `article_delay` (`max_pages` = safety only) |
 | `sources.aifunding_me` | Optional HTML source (currently unverified / often empty) |
 | `extraction` | Groq model, batch size, regex fast path |
 | `enrichment` | Tavily, `keep_labels`, search pacing |
@@ -269,13 +271,17 @@ Exit codes: `0` success, `1` no items fetched (or empty `--probe`).
 
 ## Backfill missed days
 
-The daily run only sees what FinSMEs’ current `/category/usa` listing still
-shows (roughly the latest ~12 posts). If the automation was down for several
-days, those older articles scroll off the listing and never get scraped.
+Each daily run walks FinSMEs `/category/usa` pages newest-first until a page’s
+newest post is older than **today minus `lookback_days`** (default 1 → stop at
+day-before-yesterday). That catches afternoon posts missed by a morning run.
 
-Use `src/backfill.py` to recover a date range. It scans FinSMEs’ **USA funding
-search** pages (which embed `<time datetime>`), downloads **only** articles
-inside the window, then runs the normal extract → enrich → store → render path.
+Article URLs already in `scanned_posts` are not re-downloaded or re-enriched.
+Kept deals, dropped “unrelated” posts, and rows already in `deals` all count as
+scanned. If automation was down longer than the lookback window, use backfill.
+
+Use `src/backfill.py` to recover a date range. It walks the same FinSMEs
+**`/category/usa`** pages as the daily run (with `<time datetime>`), downloads
+**only** articles inside the window, then runs extract → enrich → store → render.
 
 ```bash
 # Example: recover deals published Jul 31 – Aug 3 inclusive
@@ -289,7 +295,7 @@ uv run python -m src.backfill --from 2026-07-31 --to 2026-08-03 --no-enrich
 | Flag | Default | Meaning |
 |---|---|---|
 | `--from` / `--to` | required | Inclusive `YYYY-MM-DD` coverage dates |
-| `--pages` | `10` | Max search-result pages to scan (stops early once listings are older than `--from`) |
+| `--pages` | `10` | Max `/category/usa` pages to scan (stops after 2 consecutive pages older than `--from`) |
 | `--workers` | `4` | Parallel article downloads |
 | `--no-enrich` | off | Skip sector filter (keep everything extracted) |
 

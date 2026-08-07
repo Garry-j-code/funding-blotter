@@ -88,12 +88,22 @@ def main() -> int:
         render.write_csv(deals, csv_path)
         return 0
 
-    # 1. Fetch
-    raw = sources.fetch_all(cfg["sources"])
+    conn = store.connect(db_path)
+    skip_urls = store.scanned_urls(conn)
+
+    # 1. Fetch (skip article URLs already in scanned_posts)
+    raw = sources.fetch_all(cfg["sources"], skip_urls=skip_urls)
     if not raw:
+        # Lookback fully covered / nothing new — still refresh the page from DB.
+        recent = store.recent(conn, cfg["output"]["window_days"])
+        if recent:
+            log.info("no new articles; re-rendering %d stored deals", len(recent))
+            render.write_html(recent, html_path, _github_cfg(cfg))
+            render.write_csv(recent, csv_path)
+            return 0
         log.error("no items fetched from any source; leaving previous page intact")
         return 1
-    log.info("fetched %d raw items", len(raw))
+    log.info("fetched %d new raw items (%d urls already scanned)", len(raw), len(skip_urls))
 
     # 2. Extract
     ex_cfg = dict(cfg["extraction"])
@@ -102,8 +112,9 @@ def main() -> int:
         import os
         os.environ.pop("GROQ_API_KEY", None)
     deals = extract.extract_all(raw, ex_cfg)
-
-    conn = store.connect(db_path)
+    # Remember every extracted row (including later-dropped unrelated) so we
+    # can mark their URLs scanned and never re-fetch them.
+    scanned_batch = [dict(d) for d in deals]
 
     # 3. Enrich: LLM calls web_search tool, then keeps only fintech / FS / enablers.
     if not args.no_enrich:
@@ -119,8 +130,17 @@ def main() -> int:
         log.info("dry run: %d deals kept, nothing written", len(deals))
         return 0
 
-    # 4. Store with dedupe
+    # 4. Store with dedupe; record all fetched article URLs as scanned.
     store.upsert(conn, deals, cfg["filters"], cfg["store"]["dedupe_window_days"])
+    store.collapse_duplicate_deals(conn)
+    # Prefer extracted rows (have company); fall back to raw urls alone.
+    by_url = {d.get("url"): d for d in scanned_batch if d.get("url")}
+    to_mark = []
+    for item in raw:
+        url = item.get("url") or ""
+        row = by_url.get(url, item)
+        to_mark.append(row)
+    store.mark_scanned(conn, to_mark)
 
     # 5. Render
     recent = store.recent(conn, cfg["output"]["window_days"])

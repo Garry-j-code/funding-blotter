@@ -16,8 +16,9 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import unescape
+from urllib.parse import urljoin
 
 import feedparser
 import requests
@@ -286,65 +287,160 @@ def _finsmes_article(name: str, url: str, template_hint: str) -> dict | None:
     }
 
 
-def fetch_finsmes(name: str, cfg: dict) -> list[dict]:
+def _page_url(base: str, page: int) -> str:
+    base = base.rstrip("/") + "/"
+    if page <= 1:
+        return base
+    return urljoin(base, f"page/{page}/")
+
+
+def _dated_listing_posts(soup: BeautifulSoup) -> list[tuple[str, str]]:
+    """Return [(article_url, YYYY-MM-DD), ...] from a FinSMEs listing page."""
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for time_el in soup.select("time[datetime]"):
+        raw_dt = (time_el.get("datetime") or "")[:10]
+        try:
+            date.fromisoformat(raw_dt)
+        except ValueError:
+            continue
+        node = time_el
+        href = None
+        for _ in range(8):
+            node = node.parent
+            if not node:
+                break
+            a = node.find("a", href=FINSMES_POST_RE)
+            if a and a.get("href"):
+                href = a["href"].strip()
+                break
+        if not href or href in seen:
+            continue
+        seen.add(href)
+        out.append((href, raw_dt))
+    return out
+
+
+def fetch_finsmes(
+    name: str, cfg: dict, skip_urls: set[str] | None = None
+) -> list[dict]:
     """FinSMEs' /feed is WAF-blocked (403), but its category and article pages
-    serve normally. List a category page, then fetch each post so the regex
-    fast path still gets the templated body it expects.
+    serve normally.
+
+    Walks category pages newest-first until the page's newest post is older
+    than the lookback window (default: stop once we reach day-before-yesterday).
+    Skips article URLs already in skip_urls (scanned_posts).
     """
     template_hint = cfg.get("template_hint", "finsmes")
-    limit = int(cfg.get("article_limit", 30))
     delay = float(cfg.get("article_delay", 0.4))
+    lookback_days = int(cfg.get("lookback_days", 1))
+    # Safety only — normal stop is date-based. Prevents infinite loops if the
+    # site stops embedding dates.
+    safety_pages = int(cfg.get("max_pages", 100))
+    skip_urls = skip_urls or set()
+    cutoff = (
+        datetime.now(timezone.utc).date() - timedelta(days=lookback_days)
+    ).isoformat()
 
-    links: list[str] = []
-    seen: set[str] = set()
-
-    for url in cfg.get("urls", []):
-        try:
-            resp = requests.get(url, headers=BROWSER_HEADERS, timeout=TIMEOUT)
-            resp.raise_for_status()
-        except Exception as exc:
-            log.warning("finsmes: listing %s failed: %s", url, exc)
-            continue
-
-        soup = BeautifulSoup(resp.text, "html.parser")
-        found = 0
-        for a in soup.find_all("a", href=True):
-            href = a["href"].strip()
-            if FINSMES_POST_RE.match(href) and href not in seen:
-                seen.add(href)
-                links.append(href)
-                found += 1
-        log.info("finsmes: listing %s -> %d article links", url, found)
-
-    links = links[:limit]
     items: list[dict] = []
-    for i, href in enumerate(links):
-        art = _finsmes_article(name, href, template_hint)
-        if art:
-            items.append(art)
-        if delay and i < len(links) - 1:
-            time.sleep(delay)
+    fetched = skipped = 0
 
-    log.info("finsmes: %d articles fetched", len(items))
+    for base in cfg.get("urls", []):
+        for page in range(1, safety_pages + 1):
+            page_url = _page_url(base, page)
+            try:
+                resp = requests.get(page_url, headers=BROWSER_HEADERS, timeout=TIMEOUT)
+                resp.raise_for_status()
+            except Exception as exc:
+                log.warning("finsmes: listing %s failed: %s", page_url, exc)
+                break
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            posts = _dated_listing_posts(soup)
+            if not posts:
+                log.info("finsmes: listing %s -> 0 dated posts; stopping", page_url)
+                break
+
+            dates = [d for _, d in posts]
+            newest, oldest = max(dates), min(dates)
+            log.info(
+                "finsmes: listing %s -> %d posts (%s .. %s)",
+                page_url,
+                len(posts),
+                oldest,
+                newest,
+            )
+
+            # Entire page is before lookback (day-before-yesterday and older).
+            if newest < cutoff:
+                log.info(
+                    "finsmes: stopping — page newest %s is before cutoff %s",
+                    newest,
+                    cutoff,
+                )
+                break
+
+            for href, listed_date in posts:
+                if listed_date < cutoff:
+                    continue
+                if href in skip_urls:
+                    skipped += 1
+                    continue
+                art = _finsmes_article(name, href, template_hint)
+                fetched += 1
+                if art:
+                    pub = (art.get("published_at") or listed_date)[:10]
+                    art["published_at"] = pub
+                    if pub >= cutoff:
+                        items.append(art)
+                if delay:
+                    time.sleep(delay)
+
+            # Page straddles the cutoff — in-window posts handled; don't go deeper.
+            if oldest < cutoff:
+                log.info(
+                    "finsmes: stopping — page oldest %s crossed cutoff %s",
+                    oldest,
+                    cutoff,
+                )
+                break
+
+    log.info(
+        "finsmes: %d new articles (fetched %d, skipped %d scanned, "
+        "lookback %d day(s), cutoff %s)",
+        len(items),
+        fetched,
+        skipped,
+        lookback_days,
+        cutoff,
+    )
     return items
 
 
 FETCHERS = {"rss": fetch_rss, "html": fetch_html, "finsmes": fetch_finsmes}
 
 
-def fetch_all(sources_cfg: dict, only: str | None = None) -> list[dict]:
+def fetch_all(
+    sources_cfg: dict,
+    only: str | None = None,
+    skip_urls: set[str] | None = None,
+) -> list[dict]:
     items: list[dict] = []
     for name, cfg in sources_cfg.items():
         if only and name != only:
             continue
         if not cfg.get("enabled", True):
             continue
-        fetcher = FETCHERS.get(cfg.get("kind", "rss"))
+        kind = cfg.get("kind", "rss")
+        fetcher = FETCHERS.get(kind)
         if not fetcher:
-            log.warning("%s: unknown kind %r", name, cfg.get("kind"))
+            log.warning("%s: unknown kind %r", name, kind)
             continue
         try:
-            items.extend(fetcher(name, cfg))
+            if kind == "finsmes":
+                items.extend(fetcher(name, cfg, skip_urls=skip_urls))
+            else:
+                items.extend(fetcher(name, cfg))
         except Exception as exc:
             log.exception("%s: adapter crashed: %s", name, exc)
     return items

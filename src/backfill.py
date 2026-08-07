@@ -1,8 +1,8 @@
 """Fast backfill of FinSMEs deals for a date range.
 
-Uses USA funding search listings (which embed <time datetime>) so we only
-download full articles that fall inside the requested window — not every
-search hit.
+Walks the same `/category/usa` listing as the daily scraper (pages embed
+`<time datetime>`), downloads only articles inside the requested window, then
+runs extract → enrich → store → render.
 
   uv run python -m src.backfill --from 2026-07-31 --to 2026-08-03
 """
@@ -30,17 +30,23 @@ log = logging.getLogger("backfill")
 
 def _listing_url(page: int) -> str:
     if page <= 1:
-        return "https://www.finsmes.com/?s=funding&category_name=usa"
-    return f"https://www.finsmes.com/page/{page}/?s=funding&category_name=usa"
+        return "https://www.finsmes.com/category/usa/"
+    return f"https://www.finsmes.com/category/usa/page/{page}/"
 
 
 def collect_dated_links(
     pages: int, start: date, end: date, delay: float = 0.35
 ) -> list[tuple[str, str]]:
-    """Return [(url, YYYY-MM-DD), ...] for posts whose listing date is in range."""
+    """Return [(url, YYYY-MM-DD), ...] for posts whose listing date is in range.
+
+    Category pages are newest-first; we still require a few consecutive
+    fully-too-old pages before stopping in case a page is thin or noisy.
+    """
     out: list[tuple[str, str]] = []
     seen: set[str] = set()
-    oldest_seen: date | None = None
+    # How many back-to-back pages with newest < start before we stop.
+    stale_pages_needed = 2
+    stale_streak = 0
 
     for page in range(1, pages + 1):
         url = _listing_url(page)
@@ -85,19 +91,24 @@ def collect_dated_links(
                 out.append((href, raw_dt))
                 page_hits += 1
 
-        if page_dates:
-            oldest_seen = min(page_dates) if oldest_seen is None else min(oldest_seen, min(page_dates))
-
+        newest = max(page_dates).isoformat() if page_dates else "?"
+        oldest = min(page_dates).isoformat() if page_dates else "?"
         log.info(
-            "page %d: %d in-range (total %d) oldest_on_page=%s",
-            page, page_hits, len(out),
-            min(page_dates).isoformat() if page_dates else "?",
+            "page %d: %d in-range (total %d) newest=%s oldest=%s",
+            page, page_hits, len(out), newest, oldest,
         )
 
-        # Listings are roughly newest-first; stop once a whole page is older than start.
-        if page_dates and max(page_dates) < start and page > 1:
-            log.info("reached pages older than %s; stopping scan", start)
-            break
+        if page_dates and max(page_dates) < start:
+            stale_streak += 1
+            if page > 1 and stale_streak >= stale_pages_needed:
+                log.info(
+                    "reached %d consecutive pages older than %s; stopping scan",
+                    stale_streak,
+                    start,
+                )
+                break
+        else:
+            stale_streak = 0
 
         if delay:
             time.sleep(delay)
@@ -168,6 +179,7 @@ def main() -> int:
     log.info("backfill: %d articles to extract", len(raw))
 
     deals = extract.extract_all(raw, cfg["extraction"])
+    scanned_batch = [dict(d) for d in deals]
     db_path = str(ROOT / cfg["store"]["db_path"])
     html_path = str(ROOT / cfg["output"]["html_path"])
     csv_path = str(ROOT / cfg["output"]["csv_path"])
@@ -178,6 +190,9 @@ def main() -> int:
         enrich.purge_unrelated(conn, cfg)
 
     store.upsert(conn, deals, cfg["filters"], cfg["store"]["dedupe_window_days"])
+    store.collapse_duplicate_deals(conn)
+    by_url = {d.get("url"): d for d in scanned_batch if d.get("url")}
+    store.mark_scanned(conn, [by_url.get(r.get("url"), r) for r in raw])
     recent = store.recent(conn, cfg["output"]["window_days"])
     render.write_html(recent, html_path, _github_cfg(cfg))
     render.write_csv(recent, csv_path)

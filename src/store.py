@@ -47,6 +47,16 @@ CREATE TABLE IF NOT EXISTS company_sector (
     reason      TEXT,
     enriched_at TEXT
 );
+
+-- Article URLs already fetched/classified. Daily runs skip these so we don't
+-- re-download or re-enrich the same FinSMEs post when lookback overlaps.
+CREATE TABLE IF NOT EXISTS scanned_posts (
+    url          TEXT PRIMARY KEY,
+    company_key  TEXT,
+    published_at TEXT,
+    scanned_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scanned_pub ON scanned_posts(published_at);
 """
 
 # Suffixes and generic tails stripped before comparing company names, so
@@ -78,8 +88,49 @@ def connect(path: str) -> sqlite3.Connection:
     for col in ("sector_label", "sector_reason"):
         if col not in cols:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
+    # Seed scanned_posts from deals already stored (one-time / idempotent).
+    conn.execute(
+        "INSERT OR IGNORE INTO scanned_posts (url, company_key, published_at, scanned_at) "
+        "SELECT url, company_key, published_at, COALESCE(first_seen, ?) "
+        "FROM deals WHERE url IS NOT NULL AND url != ''",
+        (date.today().isoformat(),),
+    )
     conn.commit()
     return conn
+
+
+def scanned_urls(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT url FROM scanned_posts").fetchall()
+    return {r["url"] for r in rows if r["url"]}
+
+
+def mark_scanned(
+    conn: sqlite3.Connection,
+    items: list[dict],
+) -> int:
+    """Record article URLs so future runs skip them. Returns rows upserted."""
+    today = date.today().isoformat()
+    n = 0
+    for it in items:
+        url = (it.get("url") or "").strip()
+        if not url:
+            continue
+        key = it.get("company_key") or ""
+        if not key and it.get("company"):
+            key = company_key(it["company"])
+        conn.execute(
+            "INSERT INTO scanned_posts (url, company_key, published_at, scanned_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(url) DO UPDATE SET "
+            "company_key = COALESCE(NULLIF(excluded.company_key, ''), scanned_posts.company_key), "
+            "published_at = COALESCE(NULLIF(excluded.published_at, ''), scanned_posts.published_at)",
+            (url, key, (it.get("published_at") or "")[:10], today),
+        )
+        n += 1
+    conn.commit()
+    if n:
+        log.info("store: marked %d urls as scanned", n)
+    return n
 
 
 def _hits(blob: str, keywords: list[str]) -> int:
@@ -109,6 +160,90 @@ def score_deal(deal: dict, filters: dict) -> tuple[int, int]:
     return priority, score
 
 
+def _vague_stage(stage: str) -> bool:
+    s = (stage or "").strip().lower()
+    return s in {"", "undisclosed", "new", "funding", "investment", "n/a", "na"}
+
+
+def _stage_rank(stage: str) -> int:
+    """Higher = more specific label to prefer when collapsing duplicates."""
+    if _vague_stage(stage):
+        return 0
+    return 1 + len((stage or "").strip())
+
+
+def _merge_fills(existing: sqlite3.Row, deal: dict) -> dict:
+    fills = {}
+    if existing["amount_usd"] is None and deal.get("amount_usd") is not None:
+        fills["amount_usd"] = deal["amount_usd"]
+        fills["amount_raw"] = deal.get("amount_raw", "")
+    if not existing["investors"] and deal.get("investors"):
+        fills["investors"] = deal["investors"]
+    if not existing["location"] and deal.get("location"):
+        fills["location"] = deal["location"]
+    # Prefer a concrete stage over Undisclosed / empty.
+    if _vague_stage(existing["stage"]) and not _vague_stage(deal.get("stage", "")):
+        fills["stage"] = deal.get("stage", "")
+    return fills
+
+
+def collapse_duplicate_deals(conn: sqlite3.Connection) -> int:
+    """Remove duplicate deal rows (same URL, or same company in a close window
+    with a vague stage). Keeps the more specific stage. Returns rows deleted.
+    """
+    deleted = 0
+    # 1) Exact same article URL
+    urls = conn.execute(
+        "SELECT url FROM deals WHERE url IS NOT NULL AND url != '' "
+        "GROUP BY url HAVING COUNT(*) > 1"
+    ).fetchall()
+    for row in urls:
+        twins = conn.execute(
+            "SELECT id, stage FROM deals WHERE url = ? ORDER BY id",
+            (row["url"],),
+        ).fetchall()
+        keep = max(twins, key=lambda r: (_stage_rank(r["stage"]), -r["id"]))
+        for t in twins:
+            if t["id"] != keep["id"]:
+                conn.execute("DELETE FROM deals WHERE id = ?", (t["id"],))
+                deleted += 1
+
+    # 2) Same company_key + near dates, one stage vague
+    keys = conn.execute(
+        "SELECT company_key FROM deals GROUP BY company_key HAVING COUNT(*) > 1"
+    ).fetchall()
+    for row in keys:
+        twins = conn.execute(
+            "SELECT id, stage, published_at FROM deals WHERE company_key = ? ORDER BY id",
+            (row["company_key"],),
+        ).fetchall()
+        drop: set[int] = set()
+        for i, a in enumerate(twins):
+            if a["id"] in drop:
+                continue
+            for b in twins[i + 1 :]:
+                if b["id"] in drop:
+                    continue
+                try:
+                    da = datetime.fromisoformat(a["published_at"][:10]).date()
+                    db = datetime.fromisoformat(b["published_at"][:10]).date()
+                except (TypeError, ValueError):
+                    continue
+                if abs((da - db).days) > 21:
+                    continue
+                if _vague_stage(a["stage"]) or _vague_stage(b["stage"]):
+                    loser = a if _stage_rank(a["stage"]) < _stage_rank(b["stage"]) else b
+                    drop.add(loser["id"])
+        for did in drop:
+            conn.execute("DELETE FROM deals WHERE id = ?", (did,))
+            deleted += 1
+
+    if deleted:
+        conn.commit()
+        log.info("store: collapsed %d duplicate deal rows", deleted)
+    return deleted
+
+
 def upsert(conn: sqlite3.Connection, deals: list[dict], filters: dict,
            dedupe_days: int) -> tuple[int, int]:
     """Insert new deals, skip duplicates. Returns (inserted, skipped)."""
@@ -118,6 +253,8 @@ def upsert(conn: sqlite3.Connection, deals: list[dict], filters: dict,
     for deal in deals:
         key = company_key(deal["company"])
         pub = (deal.get("published_at") or today)[:10]
+        stage = deal.get("stage", "") or ""
+        url = (deal.get("url") or "").strip()
 
         try:
             pub_date = datetime.fromisoformat(pub).date()
@@ -126,23 +263,43 @@ def upsert(conn: sqlite3.Connection, deals: list[dict], filters: dict,
         lo = (pub_date - timedelta(days=dedupe_days)).isoformat()
         hi = (pub_date + timedelta(days=dedupe_days)).isoformat()
 
-        existing = conn.execute(
-            "SELECT id, amount_usd, investors, location FROM deals "
-            "WHERE company_key = ? AND stage = ? AND published_at BETWEEN ? AND ?",
-            (key, deal.get("stage", ""), lo, hi),
-        ).fetchone()
+        existing = None
+        # Same article URL always means the same round.
+        if url:
+            existing = conn.execute(
+                "SELECT id, amount_usd, investors, location, stage FROM deals WHERE url = ?",
+                (url,),
+            ).fetchone()
+        # Same company + stage in the dedupe window.
+        if not existing:
+            existing = conn.execute(
+                "SELECT id, amount_usd, investors, location, stage FROM deals "
+                "WHERE company_key = ? AND stage = ? AND published_at BETWEEN ? AND ?",
+                (key, stage, lo, hi),
+            ).fetchone()
+        # Same company in-window when either side has a vague stage (Undisclosed).
+        if not existing and _vague_stage(stage):
+            existing = conn.execute(
+                "SELECT id, amount_usd, investors, location, stage FROM deals "
+                "WHERE company_key = ? AND published_at BETWEEN ? AND ? "
+                "ORDER BY id LIMIT 1",
+                (key, lo, hi),
+            ).fetchone()
+        elif not existing:
+            existing = conn.execute(
+                "SELECT id, amount_usd, investors, location, stage FROM deals "
+                "WHERE company_key = ? AND published_at BETWEEN ? AND ? "
+                "ORDER BY id LIMIT 1",
+                (key, lo, hi),
+            ).fetchone()
+            if existing and not _vague_stage(existing["stage"]):
+                # Concrete stage already stored and incoming is also concrete but
+                # different — treat as a distinct round (e.g. Seed then Series A).
+                if (existing["stage"] or "").lower() != stage.lower():
+                    existing = None
 
         if existing:
-            # A second source often has detail the first one lacked; fill gaps
-            # rather than creating a duplicate row.
-            fills = {}
-            if existing["amount_usd"] is None and deal.get("amount_usd") is not None:
-                fills["amount_usd"] = deal["amount_usd"]
-                fills["amount_raw"] = deal.get("amount_raw", "")
-            if not existing["investors"] and deal.get("investors"):
-                fills["investors"] = deal["investors"]
-            if not existing["location"] and deal.get("location"):
-                fills["location"] = deal["location"]
+            fills = _merge_fills(existing, deal)
             if fills:
                 sets = ", ".join(f"{k} = ?" for k in fills)
                 conn.execute(
@@ -160,9 +317,9 @@ def upsert(conn: sqlite3.Connection, deals: list[dict], filters: dict,
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 key, deal["company"], deal.get("amount_usd"), deal.get("amount_raw", ""),
-                deal.get("stage", ""), deal.get("location", ""),
+                stage, deal.get("location", ""),
                 deal.get("description", ""), deal.get("investors", ""),
-                deal.get("source", ""), deal.get("url", ""), pub, today,
+                deal.get("source", ""), url, pub, today,
                 priority, score, deal.get("extracted_by", ""),
                 deal.get("sector_label", ""), deal.get("sector_reason", ""),
             ),
