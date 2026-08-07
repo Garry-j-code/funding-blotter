@@ -35,15 +35,22 @@ def _listing_url(page: int) -> str:
 
 
 def collect_dated_links(
-    pages: int, start: date, end: date, delay: float = 0.35
+    pages: int,
+    start: date,
+    end: date,
+    delay: float = 0.35,
+    skip_urls: set[str] | None = None,
 ) -> list[tuple[str, str]]:
     """Return [(url, YYYY-MM-DD), ...] for posts whose listing date is in range.
 
     Category pages are newest-first; we still require a few consecutive
     fully-too-old pages before stopping in case a page is thin or noisy.
+    URLs in skip_urls (already in scanned_posts / deals) are not returned.
     """
     out: list[tuple[str, str]] = []
     seen: set[str] = set()
+    skip_urls = skip_urls or set()
+    skipped = 0
     # How many back-to-back pages with newest < start before we stop.
     stale_pages_needed = 2
     stale_streak = 0
@@ -87,15 +94,19 @@ def collect_dated_links(
             seen.add(href)
             page_dates.append(pub)
 
-            if start <= pub <= end:
-                out.append((href, raw_dt))
-                page_hits += 1
+            if not (start <= pub <= end):
+                continue
+            if href in skip_urls:
+                skipped += 1
+                continue
+            out.append((href, raw_dt))
+            page_hits += 1
 
         newest = max(page_dates).isoformat() if page_dates else "?"
         oldest = min(page_dates).isoformat() if page_dates else "?"
         log.info(
-            "page %d: %d in-range (total %d) newest=%s oldest=%s",
-            page, page_hits, len(out), newest, oldest,
+            "page %d: %d new in-range (total %d, skipped %d known) newest=%s oldest=%s",
+            page, page_hits, len(out), skipped, newest, oldest,
         )
 
         if page_dates and max(page_dates) < start:
@@ -113,6 +124,8 @@ def collect_dated_links(
         if delay:
             time.sleep(delay)
 
+    if skipped:
+        log.info("skipped %d already-scanned urls in date range", skipped)
     return out
 
 
@@ -143,7 +156,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Fast FinSMEs date-range backfill")
     ap.add_argument("--from", dest="date_from", required=True)
     ap.add_argument("--to", dest="date_to", required=True)
-    ap.add_argument("--pages", type=int, default=10, help="max search pages to scan")
+    ap.add_argument("--pages", type=int, default=10, help="max category pages to scan")
     ap.add_argument("--workers", type=int, default=4, help="parallel article fetches")
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
     ap.add_argument("--no-enrich", action="store_true")
@@ -160,12 +173,26 @@ def main() -> int:
         log.error("--to must be on or after --from")
         return 1
 
-    log.info("scanning listings for %s .. %s", start, end)
-    pairs = collect_dated_links(args.pages, start, end)
+    db_path = str(ROOT / cfg["store"]["db_path"])
+    html_path = str(ROOT / cfg["output"]["html_path"])
+    csv_path = str(ROOT / cfg["output"]["csv_path"])
+    conn = store.connect(db_path)
+    skip_urls = store.scanned_urls(conn)
+
+    log.info(
+        "scanning listings for %s .. %s (%d urls already scanned)",
+        start,
+        end,
+        len(skip_urls),
+    )
+    pairs = collect_dated_links(args.pages, start, end, skip_urls=skip_urls)
     if not pairs:
-        log.error("no in-range posts found on listings")
-        return 1
-    log.info("%d posts in range — fetching article bodies (%d workers)", len(pairs), args.workers)
+        log.info("no new in-range posts (all known or none listed); refreshing page")
+        recent = store.recent(conn, cfg["output"]["window_days"])
+        render.write_html(recent, html_path, _github_cfg(cfg))
+        render.write_csv(recent, csv_path)
+        return 0
+    log.info("%d new posts in range — fetching article bodies (%d workers)", len(pairs), args.workers)
 
     raw = fetch_articles(pairs, workers=args.workers)
     # Strict filter on article meta date too.
@@ -180,10 +207,6 @@ def main() -> int:
 
     deals = extract.extract_all(raw, cfg["extraction"])
     scanned_batch = [dict(d) for d in deals]
-    db_path = str(ROOT / cfg["store"]["db_path"])
-    html_path = str(ROOT / cfg["output"]["html_path"])
-    csv_path = str(ROOT / cfg["output"]["csv_path"])
-    conn = store.connect(db_path)
 
     if not args.no_enrich:
         deals = enrich.enrich_all(deals, cfg, conn)
