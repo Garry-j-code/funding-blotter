@@ -42,10 +42,10 @@ sources:
 extraction:
   provider: groq
   base_url: https://api.groq.com/openai/v1
-  # Simple field extraction from templated text. The 8B model is more than
-  # enough and has the most headroom on the free tier. Swap to
-  # openai/gpt-oss-120b or llama-3.3-70b-versatile if you see bad parses.
-  model: llama-3.1-8b-instant
+  # Simple field extraction from templated text. Groq replaced llama-3.1-8b-instant
+  # (Aug 2026) with openai/gpt-oss-20b — same tier, good free-tier headroom.
+  # Swap to openai/gpt-oss-120b if you see bad parses.
+  model: openai/gpt-oss-20b
   # Free tier is TPM-limited (~6k/min), so batch and pace rather than
   # firing one request per article.
   batch_size: 8
