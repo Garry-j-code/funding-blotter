@@ -57,6 +57,15 @@ CREATE TABLE IF NOT EXISTS scanned_posts (
     scanned_at   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_scanned_pub ON scanned_posts(published_at);
+
+-- Companies manually removed from the blotter. Future pipeline runs skip them
+-- even if a new article URL appears.
+CREATE TABLE IF NOT EXISTS blocked_companies (
+    company_key TEXT PRIMARY KEY,
+    company     TEXT,
+    blocked_at  TEXT,
+    reason      TEXT
+);
 """
 
 # Suffixes and generic tails stripped before comparing company names, so
@@ -97,6 +106,53 @@ def connect(path: str) -> sqlite3.Connection:
     )
     conn.commit()
     return conn
+
+
+def blocked_keys(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT company_key FROM blocked_companies").fetchall()
+    return {r["company_key"] for r in rows if r["company_key"]}
+
+
+def block_company(
+    conn: sqlite3.Connection,
+    key: str,
+    company: str = "",
+    reason: str = "",
+) -> dict:
+    """Permanently block a company and delete all stored deals for it."""
+    key = (key or "").strip()
+    if not key:
+        raise ValueError("company_key is required")
+    today = date.today().isoformat()
+    conn.execute(
+        "INSERT INTO blocked_companies (company_key, company, blocked_at, reason) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(company_key) DO UPDATE SET "
+        "company = COALESCE(NULLIF(excluded.company, ''), blocked_companies.company), "
+        "blocked_at = excluded.blocked_at, "
+        "reason = COALESCE(NULLIF(excluded.reason, ''), blocked_companies.reason)",
+        (key, company or key, today, reason),
+    )
+    deals_removed = conn.execute(
+        "DELETE FROM deals WHERE company_key = ?", (key,)
+    ).rowcount
+    sector_removed = conn.execute(
+        "DELETE FROM company_sector WHERE company_key = ?", (key,)
+    ).rowcount
+    conn.commit()
+    log.info(
+        "store: blocked %s (%s) — %d deals, %d sector rows removed",
+        company or key,
+        key,
+        deals_removed,
+        sector_removed,
+    )
+    return {
+        "company_key": key,
+        "company": company or key,
+        "deals_removed": deals_removed,
+        "sector_removed": sector_removed,
+    }
 
 
 def scanned_urls(conn: sqlite3.Connection) -> set[str]:
@@ -249,9 +305,13 @@ def upsert(conn: sqlite3.Connection, deals: list[dict], filters: dict,
     """Insert new deals, skip duplicates. Returns (inserted, skipped)."""
     inserted = skipped = 0
     today = date.today().isoformat()
+    blocked = blocked_keys(conn)
 
     for deal in deals:
         key = company_key(deal["company"])
+        if key in blocked:
+            skipped += 1
+            continue
         pub = (deal.get("published_at") or today)[:10]
         stage = deal.get("stage", "") or ""
         url = (deal.get("url") or "").strip()
@@ -334,9 +394,11 @@ def upsert(conn: sqlite3.Connection, deals: list[dict], filters: dict,
 def recent(conn: sqlite3.Connection, window_days: int) -> list[dict]:
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
     rows = conn.execute(
-        "SELECT * FROM deals WHERE published_at >= ? "
-        "ORDER BY published_at DESC, priority DESC, score DESC, "
-        "COALESCE(amount_usd, 0) DESC",
+        "SELECT d.* FROM deals d "
+        "LEFT JOIN blocked_companies b ON b.company_key = d.company_key "
+        "WHERE d.published_at >= ? AND b.company_key IS NULL "
+        "ORDER BY d.published_at DESC, d.priority DESC, d.score DESC, "
+        "COALESCE(d.amount_usd, 0) DESC",
         (cutoff,),
     ).fetchall()
     return [dict(r) for r in rows]

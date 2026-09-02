@@ -1,0 +1,14 @@
+{
+  "name": "funding-blotter",
+  "private": true,
+  "scripts": {
+    "build:web": "npm --prefix web run build"
+  },
+  "dependencies": {
+    "@netlify/functions": "^3.1.10",
+    "@supabase/supabase-js": "^2.49.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

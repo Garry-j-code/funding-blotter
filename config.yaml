@@ -156,6 +156,7 @@ output:
 
 store:
   db_path: data/deals.db
+  backend: supabase  # sqlite for local dev; supabase for production pipeline
   # Two sources reporting the same round within this many days are treated
   # as one deal.
   dedupe_window_days: 21

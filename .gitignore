@@ -9,5 +9,10 @@ __pycache__/
 # macOS
 .DS_Store
 
-# NOTE: data/deals.db is intentionally committed — it is the pipeline's memory
-# across ephemeral GitHub Actions runners. Do NOT ignore it.
+# Node / Netlify frontend
+node_modules/
+web/node_modules/
+web/dist/
+
+# Local SQLite (production uses Supabase; optional for --backend sqlite dev)
+data/deals.db

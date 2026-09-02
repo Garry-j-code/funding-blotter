@@ -27,12 +27,12 @@ import json
 import logging
 import os
 import re
-import sqlite3
 import time
 from datetime import date
 
 import requests
 
+from .backend import Backend
 from .extract import GroqExtractor
 from .store import company_key
 
@@ -313,34 +313,25 @@ def _classify_one(
     )
 
 
-def _cache_get(conn: sqlite3.Connection, key: str) -> tuple[str, str] | None:
-    row = conn.execute(
-        "SELECT label, reason FROM company_sector WHERE company_key = ?", (key,)
-    ).fetchone()
-    return (row["label"], row["reason"]) if row else None
+def _cache_get(db: Backend, key: str) -> tuple[str, str] | None:
+    return db.cache_get(key)
 
 
-def _cache_put(conn: sqlite3.Connection, key: str, label: str, reason: str) -> None:
-    conn.execute(
-        "INSERT INTO company_sector (company_key, label, reason, enriched_at) "
-        "VALUES (?,?,?,?) ON CONFLICT(company_key) DO UPDATE SET "
-        "label=excluded.label, reason=excluded.reason, enriched_at=excluded.enriched_at",
-        (key, label, reason, date.today().isoformat()),
-    )
-    conn.commit()
+def _cache_put(db: Backend, key: str, label: str, reason: str) -> None:
+    db.cache_put(key, label, reason)
 
 
 def _classify_companies(
     companies: list[tuple[str, str, str, str]],
     extractor: GroqExtractor,
     searcher: TavilySearch,
-    conn: sqlite3.Connection,
+    db: Backend,
     delay: float,
 ) -> dict[str, tuple[str, str]]:
     """companies: [(company_key, name, location, description)] -> {key: (label, reason)}."""
     out: dict[str, tuple[str, str]] = {}
     for i, (key, name, location, description) in enumerate(companies):
-        cached = _cache_get(conn, key)
+        cached = _cache_get(db, key)
         if cached:
             out[key] = cached
             continue
@@ -351,14 +342,14 @@ def _classify_companies(
             out[key] = ("unknown", "")
         else:
             out[key] = (res["label"], res["reason"])
-            _cache_put(conn, key, res["label"], res["reason"])
+            _cache_put(db, key, res["label"], res["reason"])
             log.info("enrich: %s -> %s (%s)", name, res["label"], res["reason"])
         if delay and i < len(companies) - 1:
             time.sleep(delay)
     return out
 
 
-def enrich_all(deals: list[dict], cfg: dict, conn: sqlite3.Connection) -> list[dict]:
+def enrich_all(deals: list[dict], cfg: dict, db: Backend) -> list[dict]:
     """Classify each deal via web_search tool; drop unrelated companies.
 
     Fails safe: if search/LLM is unavailable, deals are returned unfiltered.
@@ -394,7 +385,7 @@ def enrich_all(deals: list[dict], cfg: dict, conn: sqlite3.Connection) -> list[d
             (key, d["company"], d.get("location", "") or "", d.get("description", "") or "")
         )
 
-    labels = _classify_companies(to_classify, extractor, searcher, conn, delay)
+    labels = _classify_companies(to_classify, extractor, searcher, db, delay)
 
     for d in deals:
         key = company_key(d["company"])
@@ -414,7 +405,7 @@ def enrich_all(deals: list[dict], cfg: dict, conn: sqlite3.Connection) -> list[d
     return kept
 
 
-def purge_unrelated(conn: sqlite3.Connection, cfg: dict) -> int:
+def purge_unrelated(db: Backend, cfg: dict) -> int:
     """Reclassify stored deals missing a sector label and delete unrelated ones.
 
     Keeps the blotter honest after the sector filter was introduced: old rows
@@ -434,18 +425,15 @@ def purge_unrelated(conn: sqlite3.Connection, cfg: dict) -> int:
     )
     delay = float(ecfg.get("seconds_between_searches", 1.0))
 
-    rows = conn.execute(
-        "SELECT DISTINCT company_key, company, location, description, "
-        "COALESCE(sector_label, '') AS sector_label FROM deals"
-    ).fetchall()
+    rows = db.companies_for_purge()
 
     need: list[tuple[str, str, str, str]] = []
     for r in rows:
-        cached = _cache_get(conn, r["company_key"])
+        cached = _cache_get(db, r["company_key"])
         if cached:
             continue
         if r["sector_label"] in VALID_LABELS:
-            _cache_put(conn, r["company_key"], r["sector_label"], "")
+            _cache_put(db, r["company_key"], r["sector_label"], "")
             continue
         need.append(
             (r["company_key"], r["company"], r["location"] or "", r["description"] or "")
@@ -453,26 +441,7 @@ def purge_unrelated(conn: sqlite3.Connection, cfg: dict) -> int:
 
     if need:
         log.info("enrich: classifying %d stored companies for purge", len(need))
-        _classify_companies(need, extractor, searcher, conn, delay)
+        _classify_companies(need, extractor, searcher, db, delay)
 
-    # Stamp deal rows from cache, then delete unrelated.
-    cache_rows = conn.execute("SELECT company_key, label, reason FROM company_sector").fetchall()
-    for r in cache_rows:
-        conn.execute(
-            "UPDATE deals SET sector_label = ?, sector_reason = ? WHERE company_key = ?",
-            (r["label"], r["reason"], r["company_key"]),
-        )
-
-    placeholders = ",".join("?" for _ in keep_labels)
-    # unknown / empty: leave them (fail-safe). Only drop explicit unrelated.
-    cur = conn.execute(
-        f"DELETE FROM deals WHERE sector_label = 'unrelated' "
-        f"OR (sector_label != '' AND sector_label NOT IN ({placeholders}) "
-        f"AND sector_label != 'unknown')",
-        tuple(keep_labels),
-    )
-    deleted = cur.rowcount
-    conn.commit()
-    if deleted:
-        log.info("enrich: purged %d unrelated deals from DB", deleted)
+    deleted = db.delete_unrelated_deals(keep_labels)
     return deleted

@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 from . import enrich, extract, render, sources, store
+from .backend import open_backend
 from .main import ROOT, _github_cfg, setup_logging
 
 log = logging.getLogger("backfill")
@@ -159,6 +160,7 @@ def main() -> int:
     ap.add_argument("--pages", type=int, default=10, help="max category pages to scan")
     ap.add_argument("--workers", type=int, default=4, help="parallel article fetches")
     ap.add_argument("--config", default=str(ROOT / "config.yaml"))
+    ap.add_argument("--backend", choices=("sqlite", "supabase"), default=None)
     ap.add_argument("--no-enrich", action="store_true")
     ap.add_argument("-v", action="store_true")
     args = ap.parse_args()
@@ -174,10 +176,9 @@ def main() -> int:
         return 1
 
     db_path = str(ROOT / cfg["store"]["db_path"])
-    html_path = str(ROOT / cfg["output"]["html_path"])
-    csv_path = str(ROOT / cfg["output"]["csv_path"])
-    conn = store.connect(db_path)
-    skip_urls = store.scanned_urls(conn)
+    backend_name = args.backend or cfg.get("store", {}).get("backend", "supabase")
+    db = open_backend(backend_name, db_path if backend_name == "sqlite" else None)
+    skip_urls = db.scanned_urls()
 
     log.info(
         "scanning listings for %s .. %s (%d urls already scanned)",
@@ -187,10 +188,13 @@ def main() -> int:
     )
     pairs = collect_dated_links(args.pages, start, end, skip_urls=skip_urls)
     if not pairs:
-        log.info("no new in-range posts (all known or none listed); refreshing page")
-        recent = store.recent(conn, cfg["output"]["window_days"])
-        render.write_html(recent, html_path, _github_cfg(cfg))
-        render.write_csv(recent, csv_path)
+        log.info("no new in-range posts (all known or none listed)")
+        if backend_name == "sqlite":
+            html_path = str(ROOT / cfg["output"]["html_path"])
+            csv_path = str(ROOT / cfg["output"]["csv_path"])
+            recent = db.recent(cfg["output"]["window_days"])
+            render.write_html(recent, html_path, _github_cfg(cfg))
+            render.write_csv(recent, csv_path)
         return 0
     log.info("%d new posts in range — fetching article bodies (%d workers)", len(pairs), args.workers)
 
@@ -208,17 +212,28 @@ def main() -> int:
     deals = extract.extract_all(raw, cfg["extraction"])
     scanned_batch = [dict(d) for d in deals]
 
-    if not args.no_enrich:
-        deals = enrich.enrich_all(deals, cfg, conn)
-        enrich.purge_unrelated(conn, cfg)
+    blocked = db.blocked_keys()
+    if blocked:
+        before = len(deals)
+        deals = [d for d in deals if store.company_key(d["company"]) not in blocked]
+        dropped = before - len(deals)
+        if dropped:
+            log.info("skipped %d deals for blocked companies", dropped)
 
-    store.upsert(conn, deals, cfg["filters"], cfg["store"]["dedupe_window_days"])
-    store.collapse_duplicate_deals(conn)
+    if not args.no_enrich:
+        deals = enrich.enrich_all(deals, cfg, db)
+        enrich.purge_unrelated(db, cfg)
+
+    db.upsert(deals, cfg["filters"], cfg["store"]["dedupe_window_days"])
+    db.collapse_duplicate_deals()
     by_url = {d.get("url"): d for d in scanned_batch if d.get("url")}
-    store.mark_scanned(conn, [by_url.get(r.get("url"), r) for r in raw])
-    recent = store.recent(conn, cfg["output"]["window_days"])
-    render.write_html(recent, html_path, _github_cfg(cfg))
-    render.write_csv(recent, csv_path)
+    db.mark_scanned([by_url.get(r.get("url"), r) for r in raw])
+    recent = db.recent(cfg["output"]["window_days"])
+    if backend_name == "sqlite":
+        html_path = str(ROOT / cfg["output"]["html_path"])
+        csv_path = str(ROOT / cfg["output"]["csv_path"])
+        render.write_html(recent, html_path, _github_cfg(cfg))
+        render.write_csv(recent, csv_path)
 
     by_day: dict[str, list[str]] = {}
     for d in recent:

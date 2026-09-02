@@ -82,7 +82,7 @@ body {
 .chip[aria-pressed="true"] {
   background: var(--ink); border-color: var(--ink); color: var(--ledger);
 }
-.chip:focus-visible, #q:focus-visible, .fetch-btn:focus-visible, .token-btn:focus-visible {
+.chip:focus-visible, #q:focus-visible, #date-filter:focus-visible, .fetch-btn:focus-visible, .token-btn:focus-visible {
   outline: 2px solid var(--flag); outline-offset: 2px;
 }
 .fetch-btn {
@@ -115,6 +115,28 @@ body {
   color: var(--ink); flex: 1 1 180px; min-width: 0; max-width: 100%;
 }
 #q::placeholder { color: var(--muted); }
+#date-filter {
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+  padding: 6px 10px; border: 1px solid var(--rule); background: var(--card);
+  color: var(--ink); flex: 0 1 auto; min-width: 0; max-width: 100%;
+}
+.date-wrap {
+  display: flex; align-items: center; gap: 6px; flex: 0 1 auto;
+}
+.date-wrap label {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  white-space: nowrap;
+}
+.date-clear {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 8px; border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+.date-clear:hover { border-color: var(--ink); color: var(--ink); }
+.date-clear:disabled { opacity: 0.35; cursor: default; }
+.date-clear:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 
 /* Date groups */
 .daybar {
@@ -162,6 +184,15 @@ body {
   display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
   overflow-wrap: anywhere;
 }
+.remove-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 7px; border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); cursor: pointer; margin-left: auto;
+}
+.remove-btn:hover { border-color: var(--flag); color: var(--flag); }
+.remove-btn:disabled { opacity: 0.45; cursor: wait; }
+.remove-btn:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 .meta .sep { color: var(--rule); }
 .meta .inv { color: var(--ink); }
 .meta .sector {
@@ -208,6 +239,8 @@ a.src:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
   .actions { margin-left: 0; width: 100%; }
   .actions .fetch-btn, .actions .token-btn { flex: 1 1 auto; text-align: center; }
   #q { flex: 1 1 auto; width: 100%; min-width: 0; }
+  .date-wrap { width: 100%; }
+  #date-filter { flex: 1 1 auto; width: 100%; }
   .headline {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -231,9 +264,11 @@ a.src:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
 
 JS = """
 const DATA = __DATA__;
-const state = { mode: 'all', q: '' };
+const state = { mode: 'all', q: '', date: '' };
 const feed = document.getElementById('feed');
 const count = document.getElementById('count');
+const dateFilter = document.getElementById('date-filter');
+const dateClear = document.getElementById('date-clear');
 
 const trim = s => s.replace(/(\\.\\d*?)0+$/, '$1').replace(/\\.$/, '');
 const fmt = (usd, raw) => {
@@ -269,14 +304,21 @@ function visible() {
     if (state.mode === 'priority' && !d.priority) return false;
     if (state.mode === 'disclosed' && d.amount_usd == null) return false;
     if (state.mode === 'early' && !/seed|series a/i.test(d.stage || '')) return false;
-    if (!q) return true;
-    return [d.company, d.description, d.investors, d.location, d.stage]
-      .join(' ').toLowerCase().includes(q);
+    if (state.date && d.published_at !== state.date) return false;
+    if (q && ![d.company, d.description, d.investors, d.location, d.stage]
+      .join(' ').toLowerCase().includes(q)) return false;
+    return true;
   });
+}
+
+function syncDateControls() {
+  const active = Boolean(state.date);
+  dateClear.disabled = !active;
 }
 
 function render() {
   const rows = visible();
+  syncDateControls();
   count.textContent = rows.length + (rows.length === 1 ? ' round' : ' rounds');
 
   if (!rows.length) {
@@ -303,6 +345,7 @@ function render() {
         ? `<a class="src" href="${esc(d.url)}" target="_blank" rel="noopener">${srcTxt}</a>`
         : `<span class="src">${srcTxt}</span>`);
       const amt = fmt(d.amount_usd, d.amount_raw);
+      const key = esc(d.company_key || '');
       return `<div class="${cls}" style="animation-delay:${Math.min(i * 14, 260)}ms">
         <div class="gutter"></div>
         <div class="body">
@@ -314,7 +357,9 @@ function render() {
             </div>
           </div>
           ${d.description ? `<div class="desc">${esc(d.description)}</div>` : ''}
-          <div class="meta">${bits.join('')}</div>
+          <div class="meta">${bits.join('')}
+            <button type="button" class="remove-btn" data-key="${key}" data-name="${esc(d.company)}" title="Remove from blotter permanently">Remove</button>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -340,7 +385,22 @@ document.getElementById('q').addEventListener('input', e => {
   t = setTimeout(() => { state.q = e.target.value; render(); }, 120);
 });
 
-/* --- Fetch today's deals (triggers GitHub Actions on your Mac runner) --- */
+const dates = [...new Set(DATA.map(d => d.published_at).filter(Boolean))].sort();
+if (dates.length) {
+  dateFilter.min = dates[0];
+  dateFilter.max = dates[dates.length - 1];
+}
+dateFilter.addEventListener('change', () => {
+  state.date = dateFilter.value || '';
+  render();
+});
+dateClear.addEventListener('click', () => {
+  state.date = '';
+  dateFilter.value = '';
+  render();
+});
+
+/* --- Fetch today's deals (triggers GitHub Actions on a self-hosted runner) --- */
 const GH = __GITHUB__;
 const TOKEN_KEY = 'funding_blotter_gh_pat';
 const actionsUrl = `https://github.com/${GH.owner}/${GH.repo}/actions/workflows/${GH.workflow}`;
@@ -372,14 +432,14 @@ fetchBtn.addEventListener('click', async () => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (!token) {
     setStatus(
-      'First click “Set token”, or open Actions and click Run workflow (Mac runner must be online).',
+      'First click “Set token”, or open Actions and click Run workflow (a Mac or Windows runner must be online).',
       'err'
     );
     window.open(actionsUrl, '_blank', 'noopener');
     return;
   }
   fetchBtn.disabled = true;
-  setStatus('Starting fetch on your Mac runner…', '');
+  setStatus('Starting fetch on your self-hosted runner…', '');
   try {
     const resp = await fetch(
       `https://api.github.com/repos/${GH.owner}/${GH.repo}/actions/workflows/${GH.workflow}/dispatches`,
@@ -392,13 +452,13 @@ fetchBtn.addEventListener('click', async () => {
         },
         body: JSON.stringify({
           ref: 'main',
-          inputs: { reason: 'blotter-page-button' },
+          inputs: { reason: 'blotter-page-button', runner: 'any' },
         }),
       }
     );
     if (resp.status === 204) {
       setStatus(
-        'Fetch started. Keep your Mac awake. Refresh this page in 2–3 minutes.',
+        'Fetch started. Keep your Mac or Windows runner awake. Refresh this page in 2–3 minutes.',
         'ok'
       );
     } else {
@@ -413,6 +473,61 @@ fetchBtn.addEventListener('click', async () => {
     setStatus(`Could not reach GitHub: ${err.message}`, 'err');
   } finally {
     fetchBtn.disabled = false;
+  }
+});
+
+feed.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.remove-btn');
+  if (!btn) return;
+  const key = btn.dataset.key;
+  const name = btn.dataset.name || key;
+  if (!key) return;
+  if (!confirm(`Remove "${name}" from the blotter permanently?\\n\\nIt will be deleted from the database and will not reappear on future fetches.`)) {
+    return;
+  }
+  const token = localStorage.getItem(TOKEN_KEY);
+  const removeWorkflow = GH.remove_workflow || 'remove-company.yml';
+  const removeUrl = `https://github.com/${GH.owner}/${GH.repo}/actions/workflows/${removeWorkflow}`;
+  if (!token) {
+    setStatus('Set a GitHub token first, or run Remove from Actions manually.', 'err');
+    window.open(removeUrl, '_blank', 'noopener');
+    return;
+  }
+  btn.disabled = true;
+  setStatus(`Removing ${name}…`, '');
+  try {
+    const resp = await fetch(
+      `https://api.github.com/repos/${GH.owner}/${GH.repo}/actions/workflows/${removeWorkflow}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'Authorization': `Bearer ${token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          ref: 'main',
+          inputs: { company_key: key, company: name, runner: 'any' },
+        }),
+      }
+    );
+    if (resp.status === 204) {
+      setStatus(
+        `Remove started for ${name}. Keep your runner awake. Refresh in 1–2 minutes.`,
+        'ok'
+      );
+    } else {
+      const body = await resp.text();
+      setStatus(`GitHub error ${resp.status}: ${body.slice(0, 180) || resp.statusText}`, 'err');
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem(TOKEN_KEY);
+        setStatus('Token rejected — click Set token and paste a fresh PAT.', 'err');
+      }
+    }
+  } catch (err) {
+    setStatus(`Could not reach GitHub: ${err.message}`, 'err');
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -451,8 +566,13 @@ TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class="toolbar">
       <input id="q" type="search" placeholder="company, investor, city" aria-label="Search rounds">
+      <div class="date-wrap">
+        <label for="date-filter">Date</label>
+        <input id="date-filter" type="date" aria-label="Filter by date">
+        <button type="button" class="date-clear" id="date-clear" disabled title="Show all dates">All</button>
+      </div>
       <div class="actions">
-        <button type="button" class="fetch-btn" id="fetch-today" title="Run the daily scrape on your Mac self-hosted runner">Fetch today's deals</button>
+        <button type="button" class="fetch-btn" id="fetch-today" title="Run the daily scrape on a self-hosted Mac or Windows runner">Fetch today's deals</button>
         <button type="button" class="token-btn" id="set-token" title="Store a GitHub PAT in this browser only">Set token</button>
       </div>
     </div>
@@ -465,8 +585,11 @@ TEMPLATE = """<!DOCTYPE html>
   <p class="foot">
     Red rail = matches your sector and location filters. n/d = amount not disclosed;
     check the SEC Form D filing for the real number.
-    &nbsp;·&nbsp; <b>Fetch today's deals</b> runs the pipeline on your Mac runner
-    (FinSMEs blocks GitHub cloud IPs). Mac must be on and the runner listening.
+    &nbsp;·&nbsp; <b>Fetch today's deals</b> runs the pipeline on a self-hosted
+    Mac or Windows runner (FinSMEs blocks GitHub cloud IPs). That machine must
+    be on with the runner listening.
+    &nbsp;·&nbsp; <b>Remove</b> deletes a company from the database and blocks it
+    from future fetches (uses the same GitHub token).
   </p>
 </div>
 <script>__JS__</script>
@@ -477,7 +600,7 @@ TEMPLATE = """<!DOCTYPE html>
 
 def write_html(deals: list[dict], path: str, github: dict | None = None) -> None:
     fields = (
-        "company", "description", "amount_usd", "amount_raw", "stage",
+        "company", "company_key", "description", "amount_usd", "amount_raw", "stage",
         "location", "investors", "source", "url", "published_at",
         "priority", "score", "sector_label", "sector_reason",
     )
@@ -487,6 +610,7 @@ def write_html(deals: list[dict], path: str, github: dict | None = None) -> None
         "owner": "Garry-j-code",
         "repo": "funding-blotter",
         "workflow": "daily.yml",
+        "remove_workflow": "remove-company.yml",
     }
 
     html = (
