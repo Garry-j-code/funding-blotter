@@ -165,6 +165,61 @@ def _parse_label(content: str) -> dict | None:
     return {"label": label, "reason": str(parsed.get("reason", "") or "").strip()[:140]}
 
 
+def _search_snippets_from_messages(messages: list[dict]) -> str:
+    parts = [
+        m.get("content", "")
+        for m in messages
+        if m.get("role") == "tool" and m.get("name") == "web_search"
+    ]
+    return "\n".join(p for p in parts if p).strip()[:1200]
+
+
+def _finalize_label(
+    extractor: GroqExtractor,
+    company: str,
+    location: str,
+    description: str,
+    search_snippets: str,
+) -> dict | None:
+    """Compact JSON-only classify after tool rounds (avoids json_object + tools clash)."""
+    labels = "ai_fintech, fintech, financial_services, enabler, unrelated"
+    user = (
+        f"Company: {company}\n"
+        f"Location: {location or 'unknown'}\n"
+        f"Article description: {description or '(none)'}\n"
+    )
+    if search_snippets:
+        user += f"\nWeb search snippets:\n{search_snippets}\n"
+    user += (
+        "\nClassify this company for a fintech / AI-fintech job blotter.\n"
+        "Reply in JSON format only (no markdown fences).\n"
+        f'"label" must be exactly one of: {labels}.\n'
+        '"reason" must be under 15 words.\n'
+        'Example: {"label": "fintech", "reason": "payments platform for banks"}'
+    )
+    messages = [
+        {"role": "system", "content": CLASSIFY_SYSTEM},
+        {"role": "user", "content": user},
+    ]
+    for with_json_mode in (True, False):
+        body: dict = {
+            "model": extractor.model,
+            "temperature": 0,
+            "max_tokens": 200,
+            "messages": messages,
+        }
+        if with_json_mode:
+            body["response_format"] = {"type": "json_object"}
+        data = extractor._post(body)
+        extractor.calls += 1
+        if not data:
+            continue
+        parsed = _parse_label(data["choices"][0]["message"].get("content") or "")
+        if parsed:
+            return parsed
+    return None
+
+
 def _classify_one(
     extractor: GroqExtractor,
     searcher: TavilySearch,
@@ -234,35 +289,28 @@ def _classify_one(
                 )
             continue
 
-        # Final answer — force JSON if the model replied in prose.
+        # Final answer — parse inline JSON, else a clean JSON-only follow-up.
         content = msg.get("content") or ""
         parsed = _parse_label(content)
         if parsed:
             return parsed
 
-        # One more nudge without tools if the model forgot the JSON shape.
-        messages.append({"role": "assistant", "content": content})
-        messages.append(
-            {
-                "role": "user",
-                "content": 'Reply with JSON only: {"label": "...", "reason": "..."}',
-            }
+        return _finalize_label(
+            extractor,
+            company,
+            location,
+            description,
+            _search_snippets_from_messages(messages),
         )
-        body = {
-            "model": extractor.model,
-            "temperature": 0,
-            "max_tokens": 200,
-            "response_format": {"type": "json_object"},
-            "messages": messages,
-        }
-        data = extractor._post(body)
-        extractor.calls += 1
-        if not data:
-            return None
-        content = data["choices"][0]["message"].get("content") or ""
-        return _parse_label(content)
 
-    return None
+    # Used all tool rounds without a parseable answer — compact JSON pass.
+    return _finalize_label(
+        extractor,
+        company,
+        location,
+        description,
+        _search_snippets_from_messages(messages),
+    )
 
 
 def _cache_get(conn: sqlite3.Connection, key: str) -> tuple[str, str] | None:

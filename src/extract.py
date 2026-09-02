@@ -221,6 +221,16 @@ class GroqExtractor:
                 continue
 
             if not resp.ok:
+                # Groq json_object mode can 400 when tool-call history confuses the
+                # validator — retry once without forced JSON schema.
+                if (
+                    resp.status_code == 400
+                    and payload.get("response_format")
+                    and "json_validate_failed" in resp.text
+                ):
+                    log.warning("groq: json_validate_failed, retrying without response_format")
+                    payload = {k: v for k, v in payload.items() if k != "response_format"}
+                    continue
                 log.error("groq: %s %s", resp.status_code, resp.text[:300])
                 return None
 
