@@ -1,15 +1,16 @@
 [build]
-  command = "npm --prefix web ci && npm --prefix web run build"
+  command = "npm ci && npm --prefix web ci && npm --prefix web run build"
   publish = "web/dist"
   functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "20"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+[functions]
+  node_bundler = "esbuild"
+
+# API routes are served by functions via export const config.path (deals, health, fetch).
+# SPA fallback only — must not catch /api/* (functions take precedence).
 
 [[redirects]]
   from = "/*"

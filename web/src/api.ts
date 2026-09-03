@@ -8,8 +8,17 @@ function adminHeaders(): HeadersInit {
 }
 
 export async function fetchDeals(windowDays = 30): Promise<Deal[]> {
-  const resp = await fetch(`${API}/deals?window_days=${windowDays}`);
-  if (!resp.ok) throw new Error(`Failed to load deals (${resp.status})`);
+  const resp = await fetch(`/api/deals?window_days=${windowDays}`);
+  if (!resp.ok) {
+    const body = await resp.text();
+    let detail = body;
+    try {
+      detail = (JSON.parse(body) as { error?: string }).error || body;
+    } catch {
+      /* use raw body */
+    }
+    throw new Error(`Failed to load deals (${resp.status}): ${detail.slice(0, 200)}`);
+  }
   return resp.json();
 }
 
