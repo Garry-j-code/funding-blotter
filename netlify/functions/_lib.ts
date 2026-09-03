@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 
 export function supabaseAdmin() {
   const url = (process.env.SUPABASE_URL || "").trim();
@@ -12,7 +13,11 @@ export function supabaseAdmin() {
       "Missing Supabase env vars. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Netlify.",
     );
   }
-  return createClient(url, key);
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    // Netlify Functions use Node < 22 unless configured; realtime-js needs a WebSocket.
+    realtime: { transport: ws as unknown as typeof WebSocket },
+  });
 }
 
 export function json(body: unknown, status = 200) {
