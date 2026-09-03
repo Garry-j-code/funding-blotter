@@ -45,7 +45,7 @@ Run **Actions → daily blotter → Run workflow** (Mac or Windows runner online
 | `GITHUB_PAT` | Optional: server-side workflow dispatch |
 | `GITHUB_OWNER` | Default `Garry-j-code` |
 | `GITHUB_REPO` | Default `funding-blotter` |
-| `GITHUB_WORKFLOW` | Default `daily.yml` |
+| `GITHUB_WORKFLOW` | Must be the **file name** `daily.yml` (default). Do **not** use the display name `daily blotter` or Pages workflows. |
 
 4. Deploy. Open the site → **Set admin secret** (same value as `ADMIN_SECRET`).
 
