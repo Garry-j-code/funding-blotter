@@ -16,6 +16,7 @@ const MODES: { id: FilterMode; label: string }[] = [
   { id: "priority", label: "Flagged" },
   { id: "early", label: "Seed & A" },
   { id: "disclosed", label: "Disclosed" },
+  { id: "under5m", label: "Under $5M" },
 ];
 
 const SECRET_KEY = "blotter_admin_secret";

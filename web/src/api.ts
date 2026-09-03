@@ -97,10 +97,15 @@ export function filterDeals(
   date: string,
 ): Deal[] {
   const query = q.toLowerCase();
+  const UNDER_5M = 5_000_000;
   return deals.filter((d) => {
     if (mode === "priority" && !d.priority) return false;
     if (mode === "disclosed" && d.amount_usd == null) return false;
     if (mode === "early" && !/seed|series a/i.test(d.stage || "")) return false;
+    // Under $5M: keep undisclosed (n/d) and disclosed amounts strictly below $5M.
+    if (mode === "under5m" && d.amount_usd != null && d.amount_usd >= UNDER_5M) {
+      return false;
+    }
     if (date && d.published_at !== date) return false;
     if (
       query &&
