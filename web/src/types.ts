@@ -16,4 +16,4 @@ export interface Deal {
   sector_reason?: string;
 }
 
-export type FilterMode = "all" | "priority" | "early" | "disclosed" | "under5m";
+export type FilterMode = "all" | "priority" | "early" | "disclosed" | "over5m";
