@@ -20,6 +20,10 @@ const MODES: { id: FilterMode; label: string }[] = [
 
 const SECRET_KEY = "blotter_admin_secret";
 
+function hasAdminSecret() {
+  return Boolean(localStorage.getItem(SECRET_KEY)?.trim());
+}
+
 export default function App() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +34,7 @@ export default function App() {
   const [q, setQ] = useState("");
   const [date, setDate] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(hasAdminSecret);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +79,10 @@ export default function App() {
   };
 
   const onRemove = async (d: Deal) => {
+    if (!isAdmin) {
+      setStatusMsg("Set admin secret in this browser to remove deals.", "err");
+      return;
+    }
     if (
       !confirm(
         `Remove "${d.company}" from the blotter permanently?\n\nIt will be deleted and blocked from future fetches.`,
@@ -95,6 +104,10 @@ export default function App() {
   };
 
   const onFetch = async () => {
+    if (!isAdmin) {
+      setStatusMsg("Set admin secret in this browser to fetch deals.", "err");
+      return;
+    }
     setBusy(true);
     setStatusMsg("Starting fetch on your self-hosted runner…");
     try {
@@ -113,17 +126,23 @@ export default function App() {
   };
 
   const onSetSecret = () => {
+    if (isAdmin) {
+      localStorage.removeItem(SECRET_KEY);
+      setIsAdmin(false);
+      setStatusMsg("Admin unlocked cleared for this browser.", "");
+      return;
+    }
     const next = prompt(
-      "Paste ADMIN_SECRET (same value as Netlify env var).\nStored in this browser only. Cancel to abort. Empty + OK clears.",
+      "Paste ADMIN_SECRET (same value as Netlify env var).\nStored in this browser only — other visitors never see it.",
     );
     if (next === null) return;
     if (!next.trim()) {
-      localStorage.removeItem(SECRET_KEY);
-      setStatusMsg("Admin secret cleared.", "");
+      setStatusMsg("No secret entered.", "err");
       return;
     }
     localStorage.setItem(SECRET_KEY, next.trim());
-    setStatusMsg("Admin secret saved.", "ok");
+    setIsAdmin(true);
+    setStatusMsg("Admin unlocked in this browser only. Fetch and Remove are now available here.", "ok");
   };
 
   const built = new Date().toUTCString().slice(5, 22).toUpperCase() + " UTC";
@@ -185,16 +204,18 @@ export default function App() {
             </button>
           </div>
           <div className="actions">
-            <button
-              type="button"
-              className="fetch-btn"
-              disabled={busy}
-              onClick={onFetch}
-            >
-              Fetch today&apos;s deals
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                className="fetch-btn"
+                disabled={busy}
+                onClick={onFetch}
+              >
+                Fetch today&apos;s deals
+              </button>
+            )}
             <button type="button" className="token-btn" onClick={onSetSecret}>
-              Set admin secret
+              {isAdmin ? "Clear admin" : "Unlock admin"}
             </button>
             <button type="button" className="token-btn" onClick={load} disabled={loading}>
               Refresh
@@ -225,7 +246,14 @@ export default function App() {
                 </span>
               </div>
               {items.map((d, i) => (
-                <DealRow key={`${d.company_key}-${d.url || i}`} deal={d} index={i} onRemove={onRemove} busy={busy} />
+                <DealRow
+                  key={`${d.company_key}-${d.url || i}`}
+                  deal={d}
+                  index={i}
+                  onRemove={onRemove}
+                  busy={busy}
+                  canRemove={isAdmin}
+                />
               ))}
             </section>
           ))}
@@ -234,9 +262,16 @@ export default function App() {
       <div className="rule thin" />
       <p className="foot">
         Red rail = matches your sector and location filters. n/d = amount not disclosed.
-        &nbsp;·&nbsp; <b>Fetch today&apos;s deals</b> triggers the GitHub Actions workflow on
-        your Mac or Windows runner.
-        &nbsp;·&nbsp; <b>Remove</b> is instant via the API (set admin secret once).
+        {isAdmin ? (
+          <>
+            &nbsp;·&nbsp; <b>Fetch</b> / <b>Remove</b> are unlocked in this browser only
+            (admin secret stays on this device).
+          </>
+        ) : (
+          <>
+            &nbsp;·&nbsp; Read-only. Use <b>Unlock admin</b> in your browser to fetch or remove.
+          </>
+        )}
       </p>
     </div>
   );
@@ -247,11 +282,13 @@ function DealRow({
   index: i,
   onRemove,
   busy,
+  canRemove,
 }: {
   deal: Deal;
   index: number;
   onRemove: (d: Deal) => void;
   busy: boolean;
+  canRemove: boolean;
 }) {
   const cls = ["deal", d.priority ? "pri" : "", d.score < 0 ? "dim" : ""]
     .filter(Boolean)
@@ -294,15 +331,17 @@ function DealRow({
           ) : (
             <span className="src">via {srcLabel(d.source)}</span>
           )}
-          <button
-            type="button"
-            className="remove-btn"
-            disabled={busy}
-            title="Remove from blotter permanently"
-            onClick={() => onRemove(d)}
-          >
-            Remove
-          </button>
+          {canRemove && (
+            <button
+              type="button"
+              className="remove-btn"
+              disabled={busy}
+              title="Remove from blotter permanently"
+              onClick={() => onRemove(d)}
+            >
+              Remove
+            </button>
+          )}
         </div>
       </div>
     </div>
