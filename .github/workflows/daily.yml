@@ -44,11 +44,7 @@ jobs:
           )
           $gitBin = $candidates | Where-Object { Test-Path (Join-Path $_ 'bash.exe') } | Select-Object -First 1
           if (-not $gitBin) {
-            throw @'
-Git for Windows is required (workflow uses bash).
-1. Install: https://git-scm.com/download/win
-2. Restart the runner service (or close run.cmd and start it again)
-'@
+            throw 'Git for Windows is required. Install https://git-scm.com/download/win then restart the runner service.'
           }
           Add-Content -Path $env:GITHUB_PATH -Value $gitBin
           Write-Host "Added to PATH: $gitBin"
