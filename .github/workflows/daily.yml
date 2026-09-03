@@ -33,6 +33,26 @@ jobs:
   build:
     runs-on: ${{ inputs.runner == 'mac' && fromJson('["self-hosted", "mac"]') || inputs.runner == 'windows' && fromJson('["self-hosted", "windows"]') || fromJson('["self-hosted"]') }}
     steps:
+      - name: Ensure Git Bash on PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $candidates = @(
+            'C:\Program Files\Git\bin',
+            'C:\Program Files (x86)\Git\bin',
+            'C:\Program Files\Git\usr\bin'
+          )
+          $gitBin = $candidates | Where-Object { Test-Path (Join-Path $_ 'bash.exe') } | Select-Object -First 1
+          if (-not $gitBin) {
+            throw @'
+Git for Windows is required (workflow uses bash).
+1. Install: https://git-scm.com/download/win
+2. Restart the runner service (or close run.cmd and start it again)
+'@
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $gitBin
+          Write-Host "Added to PATH: $gitBin"
+
       - uses: actions/checkout@v4
 
       - name: Install uv

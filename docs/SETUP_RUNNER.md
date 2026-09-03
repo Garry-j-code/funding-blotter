@@ -21,6 +21,26 @@ See [DEPLOY_NETLIFY.md](DEPLOY_NETLIFY.md) for install commands.
 
 **Windows:** install [Git for Windows](https://git-scm.com/download/win) and [uv](https://docs.astral.sh/uv/).
 
+### Windows: `bash: command not found`
+
+The workflow uses `bash`. Install Git for Windows, then verify in **PowerShell**:
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" --version
+```
+
+If that works but Actions still fails:
+
+1. Add `C:\Program Files\Git\bin` to the **system** PATH (not only user PATH):
+   Settings → System → About → Advanced system settings → Environment Variables → System variables → Path → New
+2. Restart the runner:
+   ```powershell
+   cd C:\actions-runner
+   .\svc.cmd stop
+   .\svc.cmd start
+   ```
+   Or if you use `.\run.cmd`, close that window and start it again.
+
 ---
 
 ## 2. GitHub Actions secrets
