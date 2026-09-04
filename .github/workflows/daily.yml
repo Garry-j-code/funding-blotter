@@ -57,7 +57,9 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
-        run: uv sync --frozen
+        run: |
+          uv python install 3.13
+          uv sync --frozen --python 3.13
 
       - name: Check secrets
         env:
@@ -84,4 +86,4 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: uv run python -m src.main --backend supabase
+        run: uv run --python 3.13 python -m src.main --backend supabase
