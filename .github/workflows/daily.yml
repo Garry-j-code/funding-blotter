@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Ensure Git Bash on PATH (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: |
           $candidates = @(
             'C:\Program Files\Git\bin',

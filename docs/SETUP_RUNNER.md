@@ -41,6 +41,8 @@ If that works but Actions still fails:
    ```
    Or if you use `.\run.cmd`, close that window and start it again.
 
+The workflow uses built-in **Windows PowerShell** (`powershell`), not PowerShell Core (`pwsh`). You do not need to install `pwsh`.
+
 ---
 
 ## 2. GitHub Actions secrets
