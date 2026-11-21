@@ -98,8 +98,26 @@ class SupabaseStore:
         }
 
     def scanned_urls(self) -> set[str]:
-        resp = self.client.table("scanned_posts").select("url").execute()
-        return {r["url"] for r in (resp.data or []) if r.get("url")}
+        # Page through the table: Supabase caps a single response at 1000 rows, and
+        # scanned_posts grows past that, which made already-scanned URLs get
+        # downloaded and processed again.
+        urls: set[str] = set()
+        offset = 0
+        page = 1000
+        while True:
+            resp = (
+                self.client.table("scanned_posts")
+                .select("url")
+                .order("url")
+                .range(offset, offset + page - 1)
+                .execute()
+            )
+            chunk = resp.data or []
+            urls.update(r["url"] for r in chunk if r.get("url"))
+            if len(chunk) < page:
+                break
+            offset += page
+        return urls
 
     def mark_scanned(self, items: list[dict]) -> int:
         today = date.today().isoformat()
