@@ -1,0 +1,53 @@
+{
+ "meta": {
+  "name": "Databricks"
+ },
+ "jobs": [
+  {
+   "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8574655002",
+   "internal_job_id": 6424906002,
+   "location": {
+    "name": "Seoul, South Korea"
+   },
+   "id": 8574655002,
+   "updated_at": "2026-11-19T16:47:39-05:00",
+   "requisition_id": "CSQ427R171",
+   "title": "AI Engineer - FDE (Forward Deployed Engineer)",
+   "company_name": "Databricks",
+   "first_published": "2026-06-04T02:43:16-04:00",
+   "language": "en",
+   "application_deadline": null
+  },
+  {
+   "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8546367002",
+   "education": "education_required",
+   "internal_job_id": 6413668002,
+   "location": {
+    "name": "United States"
+   },
+   "id": 8546367002,
+   "updated_at": "2026-11-19T16:47:39-05:00",
+   "requisition_id": "CSQ327R177",
+   "title": "AI Engineer \u2013 Forward Deployed Engineering (AI FDE)",
+   "company_name": "Databricks",
+   "first_published": "2026-05-13T08:21:01-04:00",
+   "language": "en",
+   "application_deadline": null
+  },
+  {
+   "absolute_url": "https://databricks.com/company/careers/open-positions/job?gh_jid=8937106002",
+   "internal_job_id": 6250274002,
+   "location": {
+    "name": "Tokyo, Japan"
+   },
+   "id": 8937106002,
+   "updated_at": "2026-11-19T16:47:39-05:00",
+   "requisition_id": "P-1469",
+   "title": "GTM Recruiter",
+   "company_name": "Databricks",
+   "first_published": "2026-11-10T18:00:55-05:00",
+   "language": "en",
+   "application_deadline": null
+  }
+ ]
+}

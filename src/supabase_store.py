@@ -379,6 +379,56 @@ class SupabaseStore:
             log.info("supabase: purged %d unrelated deals", deleted)
         return deleted
 
+    # ------------------------------------------------------------------
+    # Careers (see src/jobs.py). Supabase-only: there is no SQLite version.
+    # ------------------------------------------------------------------
+    def _all_rows(self, table: str, cols: str, order: str) -> list[dict]:
+        """Every row of a table (Supabase caps one response at 1000 rows)."""
+        rows: list[dict] = []
+        offset, page = 0, 1000
+        while True:
+            chunk = (
+                self.client.table(table).select(cols).order(order)
+                .range(offset, offset + page - 1).execute().data or []
+            )
+            rows.extend(chunk)
+            if len(chunk) < page:
+                return rows
+            offset += page
+
+    def deal_companies(self) -> list[dict]:
+        """One {company_key, company} per company in deals; newest row's name wins."""
+        by_key: dict[str, dict] = {}
+        for r in self._all_rows("deals", "id,company_key,company", "id"):
+            if r.get("company_key"):
+                by_key[r["company_key"]] = {"company_key": r["company_key"], "company": r["company"]}
+        return list(by_key.values())
+
+    def careers_all(self) -> dict[str, dict]:
+        rows = self._all_rows("company_careers", "*", "company_key")
+        return {r["company_key"]: r for r in rows}
+
+    def careers_upsert(self, row: dict) -> None:
+        self.client.table("company_careers").upsert(row, on_conflict="company_key").execute()
+
+    def jobs_all(self) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        for r in self._all_rows("jobs", "*", "id"):
+            out.setdefault(r["company_key"], []).append(r)
+        return out
+
+    def jobs_upsert(self, rows: list[dict]) -> None:
+        for i in range(0, len(rows), 200):
+            self.client.table("jobs").upsert(
+                rows[i:i + 200], on_conflict="company_key,external_id"
+            ).execute()
+
+    def jobs_close(self, ids: list[int], today: str) -> None:
+        for i in range(0, len(ids), 200):
+            self.client.table("jobs").update(
+                {"is_open": False, "closed_at": today}
+            ).in_("id", ids[i:i + 200]).execute()
+
 
 def _merge_fills_row(existing: dict, deal: dict) -> dict:
     """Dict version of store._merge_fills for Supabase rows."""

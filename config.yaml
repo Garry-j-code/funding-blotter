@@ -160,3 +160,46 @@ store:
   # Two sources reporting the same round within this many days are treated
   # as one deal.
   dedupe_window_days: 21
+
+jobs:
+  # Open roles pulled from each company's public job board (Ashby, Greenhouse,
+  # Lever, Workable). Titles are matched with regexes (case-insensitive). The
+  # FIRST role that matches becomes the primary role_type; every match is kept
+  # in `tags`. Edit these lists to change what counts as a relevant role.
+  roles:
+    - role_type: forward_deployed_engineer
+      patterns:                         # also needs "engineer/engineering/developer" in the title,
+        - 'forward[- ]deployed'         # so "Forward Deployed Banker" / "... Auditor" do not match
+        - '\bFDE\b'
+    - role_type: ai_product_engineer
+      patterns:
+        - '\bai\b.*product (engineer|developer)s?\b'
+        - 'product (engineer|developer)s?\b.*\bai\b'
+    - role_type: product_engineer
+      patterns:
+        - 'product (engineer|developer)s?\b'
+    - role_type: ai_engineer
+      # Strict: "AI Engineer" and direct variants only. Not ML Engineer, AI Security/Operations
+      # Engineer, or generic "Software Engineer, AI" titles.
+      patterns:
+        - '\b(ai|a\.i\.|genai|gen ai|generative ai|llm)\s*(/\s*ml\s+|&\s*ml\s+)?(software\s+|full[- ]?stack\s+|backend\s+)?(engineer|developer)s?\b'
+        - '\bai/ml (engineer|developer)s?\b'
+        - '\bapplied (ai|ml) (engineer|developer)s?\b'
+  # A title containing any of these is never a match (not an engineering role).
+  exclude_title: '\b(manager|director|head of|recruiter|recruiting|sales|account executive|marketing|vice president|vp)\b'
+  workers: 4                  # parallel companies
+  # Minimum seconds between requests to the same host, shared by all workers. Workable throttles
+  # hard (HTTP 429), so it is slower and is only asked after the other systems found nothing.
+  host_min_interval:
+    default: 0.15
+    apply.workable.com: 1.2
+  workable_max_candidates: 2  # only the first N name guesses are tried on Workable
+  rate_limit_trip_after: 6    # this many exhausted 429s in a row pauses that host for the rest of the run
+  rate_limit_cooldown: 300    # seconds a paused host stays paused
+  # A 429 whose Retry-After is longer than this pauses the host at once (for that long) instead of
+  # waiting. Workable has answered 'retry in ~24 hours' after a burst of requests.
+  rate_limit_max_wait: 120
+  max_slug_candidates: 6      # board-name guesses tried per company
+  retry_no_board_days: 7      # re-try discovery for companies with no board this often
+  new_badge_days: 7           # a role is "new" for this many days after first seen
+  max_error_rate: 0.2         # exit non-zero if more than this share of fetches fail

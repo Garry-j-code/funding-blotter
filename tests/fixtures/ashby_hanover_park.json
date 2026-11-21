@@ -1,0 +1,80 @@
+{
+ "apiVersion": "1",
+ "jobs": [
+  {
+   "id": "f9d00934-7b43-4d9b-8233-eb75d2f1569e",
+   "title": "Forward Deployed Engineer",
+   "department": "Operations",
+   "team": "Operations",
+   "employmentType": "FullTime",
+   "location": "New York City",
+   "secondaryLocations": [],
+   "publishedAt": "2026-11-19T16:27:20.521+00:00",
+   "isListed": true,
+   "isRemote": false,
+   "workplaceType": "OnSite",
+   "address": {
+    "postalAddress": {
+     "postalCode": "10016",
+     "addressRegion": "New York",
+     "streetAddress": "387 Park Ave S, 10 Floor",
+     "addressCountry": "United States",
+     "addressLocality": "New York City"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/hanover-park/f9d00934-7b43-4d9b-8233-eb75d2f1569e",
+   "applyUrl": "https://jobs.ashbyhq.com/hanover-park/f9d00934-7b43-4d9b-8233-eb75d2f1569e/application",
+   "descriptionPlain": "WHAT HANOVER PARK DOES\n\nHanover Park https://hanoverpark.com/ builds AI systems that run financial operations for investment firms. We combine software and fund administration to help fund CFOs adopt AI in the workflows they\u2019re responsible for every day.\n\nWe\u2019ve raised $31 million from Emergence Capital, Lux Capital, Susa Ventures, and fund CFOs from Bain Capital, Clearlake, CD&R, and Hellman & Friedman.\n\nFund administration is our starting point. Our ambition is to build the financial infrastructure that supports how the world\u2019s capital is operated, governed, and allocated. Over time, we believe these systems will help investment firms make decisions about their largest acquisitions and how "
+  },
+  {
+   "id": "0b390016-7eb8-4b88-b409-3bc1b4480b1e",
+   "title": "Product Engineer",
+   "department": "Engineering",
+   "team": "Engineering",
+   "employmentType": "FullTime",
+   "location": "New York City",
+   "secondaryLocations": [],
+   "publishedAt": "2026-11-19T16:45:30.237+00:00",
+   "isListed": true,
+   "isRemote": false,
+   "workplaceType": "OnSite",
+   "address": {
+    "postalAddress": {
+     "postalCode": "10016",
+     "addressRegion": "New York",
+     "streetAddress": "387 Park Ave S, 10 Floor",
+     "addressCountry": "United States",
+     "addressLocality": "New York City"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/hanover-park/0b390016-7eb8-4b88-b409-3bc1b4480b1e",
+   "applyUrl": "https://jobs.ashbyhq.com/hanover-park/0b390016-7eb8-4b88-b409-3bc1b4480b1e/application",
+   "descriptionPlain": "WHAT HANOVER PARK DOES\n\nHanover Park https://hanoverpark.com/ builds AI systems that run financial operations for investment firms. We combine software and fund administration to help fund CFOs adopt AI in the workflows they\u2019re responsible for every day.\n\nWe\u2019ve raised $31 million from Emergence Capital, Lux Capital, Susa Ventures, and fund CFOs from Bain Capital, Clearlake, CD&R, and Hellman & Friedman.\n\nFund administration is our starting point. Our ambition is to build the financial infrastructure that supports how the world\u2019s capital is operated, governed, and allocated. Over time, we believe these systems will help investment firms make decisions about their largest acquisitions and how "
+  },
+  {
+   "id": "59a752d8-5608-4788-a67c-e2ece03e29b7",
+   "title": "Account Executive",
+   "department": "Business / GTM",
+   "team": "Business / GTM",
+   "employmentType": "FullTime",
+   "location": "New York City",
+   "secondaryLocations": [],
+   "publishedAt": "2026-11-17T22:52:56.319+00:00",
+   "isListed": true,
+   "isRemote": false,
+   "workplaceType": "OnSite",
+   "address": {
+    "postalAddress": {
+     "postalCode": "10016",
+     "addressRegion": "New York",
+     "streetAddress": "387 Park Ave S, 10 Floor",
+     "addressCountry": "United States",
+     "addressLocality": "New York City"
+    }
+   },
+   "jobUrl": "https://jobs.ashbyhq.com/hanover-park/59a752d8-5608-4788-a67c-e2ece03e29b7",
+   "applyUrl": "https://jobs.ashbyhq.com/hanover-park/59a752d8-5608-4788-a67c-e2ece03e29b7/application",
+   "descriptionPlain": "WHAT HANOVER PARK DOES\n\nHanover Park https://hanoverpark.com/ builds AI systems that run financial operations for investment firms. We combine software and fund administration to help fund CFOs adopt AI in the workflows they\u2019re responsible for every day.\n\nWe\u2019ve raised $31 million from Emergence Capital, Lux Capital, Susa Ventures, and fund CFOs from Bain Capital, Clearlake, CD&R, and Hellman & Friedman.\n\nFund administration is our starting point. Our ambition is to build the financial infrastructure that supports how the world\u2019s capital is operated, governed, and allocated. Over time, we believe these systems will help investment firms make decisions about their largest acquisitions and how "
+  }
+ ]
+}
