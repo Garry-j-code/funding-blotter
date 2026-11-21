@@ -16,3 +16,6 @@ web/dist/
 
 # Local SQLite (production uses Supabase; optional for --backend sqlite dev)
 data/deals.db
+
+# Local Netlify folder
+.netlify
