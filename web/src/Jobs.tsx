@@ -252,11 +252,12 @@ function AdminCompanies({
   };
 
   return (
-    <section className="admin-jobs" aria-label="Add a company careers URL">
-      <div className="daybar">
+    <details className="admin-jobs">
+      <summary className="daybar">
         <span>Add a careers URL</span>
         <span>admin</span>
-      </div>
+      </summary>
+      <div className="admin-body">
       <p className="careers-empty">
         For a company that is not in the blotter. The next daily run reads the URL and lists matching roles. For a company
         already in the blotter, use the Careers panel on its card.
@@ -289,7 +290,8 @@ function AdminCompanies({
           </ul>
         </details>
       )}
-    </section>
+      </div>
+    </details>
   );
 }
 

@@ -236,7 +236,13 @@ body {
 .jobs-title { font-family: Newsreader, Georgia, serif; font-size: 18px; color: var(--ink); overflow-wrap: anywhere; }
 .jobs-row .job-meta { font-family: 'IBM Plex Mono', monospace; font-size: 11px; align-items: center; }
 .jobs-company { color: var(--ink); font-weight: 500; }
-.admin-jobs { margin-top: 28px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; display: grid; gap: 8px; }
+.admin-jobs { margin-top: 18px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; border-bottom: 1px solid var(--rule); }
+.admin-jobs > summary { cursor: pointer; list-style: none; padding: 10px 0; align-items: center; }
+.admin-jobs > summary::-webkit-details-marker { display: none; }
+.admin-jobs > summary > span:first-child::before { content: "+ "; }
+.admin-jobs[open] > summary > span:first-child::before { content: "\2212  "; }
+.admin-jobs > summary:focus-visible { outline: 2px solid var(--credit); outline-offset: 2px; }
+.admin-body { display: grid; gap: 8px; padding-bottom: 14px; }
 .admin-jobs .careers-edit { border-top: 0; padding-top: 0; }
 .admin-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 14px; }
 .admin-row { display: grid; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--rule); }
