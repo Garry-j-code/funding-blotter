@@ -17,3 +17,32 @@ export interface Deal {
 }
 
 export type FilterMode = "all" | "priority" | "disclosed" | "over5m";
+
+export interface CareerJob {
+  id: number;
+  title: string;
+  location?: string | null;
+  url: string;
+  role_type: string;
+  posted_at?: string | null;
+  first_seen: string;
+  is_new: boolean;
+}
+
+/** One company's careers data. The last four fields are only sent to the admin. */
+export interface Careers {
+  company?: string;
+  careers_url: string | null;
+  ats: string | null;
+  roles_tracked?: boolean;          // false: a saved page we cannot read roles from
+  last_checked?: string | null;
+  jobs: CareerJob[];
+  verified?: boolean;
+  status?: string;
+  source?: string;
+  consecutive_errors?: number;
+  needs_refresh?: boolean;          // saved, waiting for the next run
+  standalone?: boolean;             // added on the Jobs page; the company is not in the blotter
+}
+
+export type CareersMap = Record<string, Careers>;

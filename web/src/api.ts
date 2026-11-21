@@ -1,4 +1,4 @@
-import type { Deal } from "./types";
+import type { Careers, CareersMap, Deal } from "./types";
 
 const API = "/api";
 
@@ -172,4 +172,79 @@ export function filterDeals(
     }
     return true;
   });
+}
+
+export async function fetchCareers(): Promise<CareersMap> {
+  // The admin secret (if unlocked) makes the server include unverified guesses.
+  const resp = await fetch(`${API}/careers`, { headers: adminHeaders() });
+  if (!resp.ok) throw new Error(`Failed to load careers (${resp.status})`);
+  return resp.json();
+}
+
+export async function saveCareers(
+  companyKey: string,
+  body: { careers_url?: string; accept?: boolean; clear?: boolean },
+): Promise<Careers> {
+  const resp = await fetch(`${API}/careers/${encodeURIComponent(companyKey)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...adminHeaders() },
+    body: JSON.stringify(body),
+  });
+  if (resp.status === 401) throw new Error("Unauthorized: unlock admin first");
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || `Save failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+async function adminError(resp: Response, fallback: string): Promise<Error> {
+  if (resp.status === 401) return new Error("Unauthorized: unlock admin first");
+  const err = await resp.json().catch(() => ({}));
+  return new Error((err as { error?: string }).error || `${fallback} (${resp.status})`);
+}
+
+/** Admin: add a company that is not in the blotter, with the URL to check on the next run. */
+export async function addCareersCompany(company: string, careersUrl: string): Promise<Careers & { company_key: string }> {
+  const resp = await fetch(`${API}/careers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...adminHeaders() },
+    body: JSON.stringify({ company, careers_url: careersUrl }),
+  });
+  if (!resp.ok) throw await adminError(resp, "Could not add the company");
+  return resp.json();
+}
+
+/** Admin: remove a company that was added on the Jobs page (its roles go with it). */
+export async function removeCareersCompany(companyKey: string): Promise<void> {
+  const resp = await fetch(`${API}/careers/${encodeURIComponent(companyKey)}`, {
+    method: "DELETE",
+    headers: adminHeaders(),
+  });
+  if (!resp.ok) throw await adminError(resp, "Could not remove the company");
+}
+
+export const ROLE_TYPES = ["forward_deployed_engineer", "ai_engineer", "product_engineer", "ai_product_engineer"] as const;
+
+const ROLE_LABELS: Record<string, string> = {
+  forward_deployed_engineer: "Forward Deployed Engineer",
+  ai_product_engineer: "AI Product Engineer",
+  product_engineer: "Product Engineer",
+  ai_engineer: "AI Engineer",
+};
+
+export function roleLabel(roleType: string): string {
+  return ROLE_LABELS[roleType] || roleType;
+}
+
+export function timeAgo(iso?: string | null): string {
+  if (!iso) return "not checked yet";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "not checked yet";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return "checked just now";
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `checked ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `checked ${days} day${days === 1 ? "" : "s"} ago`;
 }

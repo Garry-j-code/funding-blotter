@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   dayLabel,
+  fetchCareers,
   fetchDeals,
   fetchMonths,
   BASE_STAGES,
@@ -12,9 +13,11 @@ import {
   stageKey,
   triggerFetch,
 } from "./api";
+import CareersPanel from "./Careers";
 import DateRangePicker from "./DateRangePicker";
+import JobsPage from "./Jobs";
 import type { MonthInfo } from "./api";
-import type { Deal, FilterMode } from "./types";
+import type { Careers, CareersMap, Deal, FilterMode } from "./types";
 
 const MODES: { id: FilterMode; label: string }[] = [
   { id: "all", label: "All" },
@@ -24,6 +27,9 @@ const MODES: { id: FilterMode; label: string }[] = [
 ];
 
 const ALL_TIME = "all";
+
+type View = "blotter" | "jobs";
+const viewFromHash = (): View => (window.location.hash === "#/jobs" ? "jobs" : "blotter");
 
 function currentMonth(): string {
   const d = new Date();
@@ -64,6 +70,9 @@ export default function App() {
   const [dateTo, setDateTo] = useState("");
   const [month, setMonth] = useState(currentMonth);
   const [monthList, setMonthList] = useState<MonthInfo[]>([]);
+  const [careers, setCareers] = useState<CareersMap>({});
+  const [careersLoaded, setCareersLoaded] = useState(false);
+  const [view, setView] = useState<View>(viewFromHash);
   const [busy, setBusy] = useState(false);
   const [isAdmin, setIsAdmin] = useState(hasAdminSecret);
 
@@ -94,6 +103,33 @@ export default function App() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const onHash = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    fetchCareers()
+      .then(setCareers)
+      .catch(() => {
+        /* careers are optional; cards just show no careers info */
+      })
+      .finally(() => setCareersLoaded(true));
+  }, [isAdmin]);
+
+  const onCareersRemoved = useCallback((key: string) => {
+    setCareers((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const onCareersSaved = useCallback((key: string, entry: Careers) => {
+    setCareers((prev) => ({ ...prev, [key]: entry }));
+  }, []);
 
   useEffect(() => {
     fetchMonths()
@@ -242,10 +278,36 @@ export default function App() {
         <div className="sub">
           finsmes &nbsp;·&nbsp; aifunding.me
           &nbsp;&nbsp;|&nbsp;&nbsp; built <b>{built}</b>
-          &nbsp;&nbsp;|&nbsp;&nbsp; <b>{visible.length} rounds</b>
+          {view === "blotter" ? (
+            <>
+              &nbsp;&nbsp;|&nbsp;&nbsp; <b>{visible.length} rounds</b>
+            </>
+          ) : (
+            <>&nbsp;&nbsp;|&nbsp;&nbsp; open roles from company job boards</>
+          )}
         </div>
+        <nav className="nav" aria-label="Pages">
+          <a href="#/" aria-current={view === "blotter" ? "page" : undefined}>
+            Blotter
+          </a>
+          <a href="#/jobs" aria-current={view === "jobs" ? "page" : undefined}>
+            Jobs
+          </a>
+        </nav>
         <div className="rule" />
       </header>
+
+      {view === "jobs" ? (
+        <JobsPage
+          careers={careers}
+          loaded={careersLoaded}
+          isAdmin={isAdmin}
+          onSetSecret={onSetSecret}
+          onSaved={onCareersSaved}
+          onRemoved={onCareersRemoved}
+        />
+      ) : (
+        <>
 
       <div className="controls">
         <div className="chips">
@@ -375,6 +437,8 @@ export default function App() {
                   onRemove={onRemove}
                   busy={busy}
                   canRemove={isAdmin}
+                  careers={careers[d.company_key]}
+                  onCareersSaved={onCareersSaved}
                 />
               ))}
             </section>
@@ -395,6 +459,8 @@ export default function App() {
           </>
         )}
       </p>
+        </>
+      )}
     </div>
   );
 }
@@ -405,13 +471,19 @@ function DealRow({
   onRemove,
   busy,
   canRemove,
+  careers,
+  onCareersSaved,
 }: {
   deal: Deal;
   index: number;
   onRemove: (d: Deal) => void;
   busy: boolean;
   canRemove: boolean;
+  careers?: Careers;
+  onCareersSaved: (companyKey: string, entry: Careers) => void;
 }) {
+  const [showCareers, setShowCareers] = useState(false);
+  const roleCount = careers?.jobs.length ?? 0;
   const cls = ["deal", d.priority ? "pri" : "", d.score < 0 ? "dim" : ""]
     .filter(Boolean)
     .join(" ");
@@ -453,6 +525,16 @@ function DealRow({
           ) : (
             <span className="src">via {srcLabel(d.source)}</span>
           )}
+          <button
+            type="button"
+            className="careers-btn"
+            aria-expanded={showCareers}
+            title="Careers page and open roles"
+            onClick={() => setShowCareers((v) => !v)}
+          >
+            Careers
+            {roleCount > 0 && <span className="careers-count">{roleCount}</span>}
+          </button>
           {canRemove && (
             <button
               type="button"
@@ -465,6 +547,9 @@ function DealRow({
             </button>
           )}
         </div>
+        {showCareers && (
+          <CareersPanel deal={d} entry={careers} isAdmin={canRemove} onSaved={onCareersSaved} />
+        )}
       </div>
     </div>
   );

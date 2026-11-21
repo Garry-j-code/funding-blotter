@@ -168,6 +168,73 @@ body {
   color: var(--muted);
 }
 
+/* Careers (open roles on a card) */
+.careers-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 7px; border: 1px solid var(--rule); background: transparent;
+  color: var(--muted); cursor: pointer; margin-left: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.careers-btn + .remove-btn { margin-left: 0; }
+.careers-btn:hover { border-color: var(--ink); color: var(--ink); }
+.careers-btn[aria-expanded="true"] { background: var(--ink); border-color: var(--ink); color: var(--ledger); }
+.careers-btn:focus-visible, .mini-btn:focus-visible, .careers-edit input:focus-visible {
+  outline: 2px solid var(--flag); outline-offset: 2px;
+}
+.careers-count {
+  background: var(--credit); color: var(--ledger); border-radius: 8px;
+  padding: 0 5px; font-size: 9px; line-height: 14px;
+}
+.careers-panel {
+  margin-top: 10px; padding: 10px 12px; border: 1px solid var(--rule); background: var(--card);
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink);
+  display: grid; gap: 8px; overflow-wrap: anywhere;
+}
+.careers-url { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.careers-url a { color: var(--credit); }
+.careers-age { color: var(--muted); font-size: 10px; }
+.careers-empty { color: var(--muted); }
+.careers-warn { color: var(--flag); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.job-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.job-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.job-row > a { font-family: Newsreader, Georgia, serif; font-size: 15px; color: var(--ink); }
+.job-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); }
+.chip-role { border: 1px solid var(--rule); padding: 0 5px; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; }
+.badge-new { background: var(--flag); color: var(--ledger); padding: 0 5px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+.mini-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 7px; border: 1px solid var(--rule); background: transparent; color: var(--muted); cursor: pointer;
+}
+.mini-btn:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
+.mini-btn:disabled { opacity: 0.45; cursor: default; }
+.careers-edit { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding-top: 8px; border-top: 1px dashed var(--rule); }
+.careers-edit label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.careers-edit input {
+  flex: 1 1 220px; min-width: 0; font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  padding: 5px 8px; border: 1px solid var(--rule); background: var(--ledger); color: var(--ink);
+}
+
+/* Header navigation and the Jobs page */
+.nav { display: flex; gap: 6px; margin-top: 14px; }
+.nav a {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 4px 10px; border: 1px solid var(--rule); color: var(--muted); text-decoration: none;
+}
+.nav a:hover { border-color: var(--ink); color: var(--ink); }
+.nav a[aria-current="page"] { background: var(--ink); border-color: var(--ink); color: var(--ledger); }
+.nav a:focus-visible { outline: 2px solid var(--credit); outline-offset: 2px; }
+.jobs-list { list-style: none; margin: 0; padding: 0; }
+.jobs-row { padding: 12px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 4px; }
+.jobs-title { font-family: Newsreader, Georgia, serif; font-size: 18px; color: var(--ink); overflow-wrap: anywhere; }
+.jobs-row .job-meta { font-family: 'IBM Plex Mono', monospace; font-size: 11px; align-items: center; }
+.jobs-company { color: var(--ink); font-weight: 500; }
+.admin-jobs { margin-top: 28px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; display: grid; gap: 8px; }
+.admin-jobs .careers-edit { border-top: 0; padding-top: 0; }
+.admin-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 14px; }
+.admin-row { display: grid; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--rule); }
+.admin-row-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+
 /* Date groups */
 .daybar {
   font-family: 'IBM Plex Mono', monospace; font-size: 11px;
