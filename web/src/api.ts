@@ -224,6 +224,29 @@ export async function removeCareersCompany(companyKey: string): Promise<void> {
   if (!resp.ok) throw await adminError(resp, "Could not remove the company");
 }
 
+export interface CareersRun {
+  id: number;
+  status: string;                 // queued | in_progress | completed
+  conclusion: string | null;      // success | failure | cancelled ... once completed
+  created_at: string;
+  html_url: string;
+  active: boolean;
+}
+
+/** Admin: the latest careers workflow run (null if it never ran); `configured` is false when the server has no GitHub token. */
+export async function fetchCareersRun(): Promise<{ configured: boolean; run: CareersRun | null }> {
+  const resp = await fetch(`${API}/careers-run`, { headers: adminHeaders() });
+  if (!resp.ok) throw await adminError(resp, "Could not read the run status");
+  return resp.json();
+}
+
+/** Admin: start the careers workflow now. */
+export async function startCareersRun(): Promise<string> {
+  const resp = await fetch(`${API}/careers-run`, { method: "POST", headers: adminHeaders() });
+  if (!resp.ok) throw await adminError(resp, "Could not start the run");
+  return ((await resp.json()) as { message?: string }).message || "Careers run started.";
+}
+
 export const ROLE_TYPES = ["forward_deployed_engineer", "ai_engineer", "product_engineer", "ai_product_engineer"] as const;
 
 const ROLE_LABELS: Record<string, string> = {

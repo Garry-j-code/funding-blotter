@@ -31,6 +31,7 @@ Two halves:
 | `src/backfill.py` | Recover a date range of missed days |
 | `src/jobs.py` | Careers: find each company's public job board, sync matching open roles (Supabase only) |
 | `netlify/functions/careers.ts` | `GET /api/careers`; admin `POST /api/careers`, `PUT` / `DELETE /api/careers/:company_key` |
+| `netlify/functions/careers-run.ts`, `_github.ts` | Admin `GET`/`POST /api/careers-run`: latest run of `jobs.yml` and the Jobs page **Run now** button (uses `GITHUB_PAT`; the workflow file name is fixed in code) |
 | `web/src/Careers.tsx` | The "Careers" panel on each card |
 | `web/src/Jobs.tsx` | The Jobs page (`#/jobs`): all open roles, plus the admin "add a careers URL" form |
 | `tests/` | Offline pytest suite for `src/jobs.py` (no network, no database) |

@@ -297,3 +297,11 @@ it was added (`company_careers.created_at`). The API sends it as `added_at`. `cr
 ALTER TABLE company_careers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ```
 
+## 12. Addendum: Run now
+
+Admins get a **Run now** button on the Jobs page. It calls `POST /api/careers-run`, which asks GitHub to start
+`jobs.yml` on `main` (workflow_dispatch) using the same `GITHUB_PAT` as the Fetch button. It is refused while a
+run is already queued or in progress, and the workflow file name is fixed in code. The page then polls
+`GET /api/careers-run` (latest run, status, link) every 8 seconds and reloads the roles when the run finishes.
+It only works once `jobs.yml` is on `main`. Without `GITHUB_PAT` on the server the button is hidden and the page says so.
+

@@ -42,7 +42,7 @@ Run **Actions → daily blotter → Run workflow** (Mac or Windows runner online
 | `SUPABASE_URL` | API reads/writes |
 | `SUPABASE_SERVICE_ROLE_KEY` | API (never expose to browser) |
 | `ADMIN_SECRET` | Protects Remove + Fetch API |
-| `GITHUB_PAT` | Optional: server-side workflow dispatch |
+| `GITHUB_PAT` | Optional: server-side workflow dispatch. Used by **Fetch today's deals** and the Jobs page **Run now** button. Needs Actions read and write on the repo. |
 | `GITHUB_OWNER` | Default `Garry-j-code` |
 | `GITHUB_REPO` | Default `funding-blotter` |
 | `GITHUB_WORKFLOW` | Must be the **file name** `daily.yml` (default). Do **not** use the display name `daily blotter` or Pages workflows. |

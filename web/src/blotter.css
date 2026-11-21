@@ -242,6 +242,9 @@ body {
 .admin-jobs > summary > span:first-child::before { content: "+ "; }
 .admin-jobs[open] > summary > span:first-child::before { content: "\2212  "; }
 .admin-jobs > summary:focus-visible { outline: 2px solid var(--credit); outline-offset: 2px; }
+.run-line { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding-top: 10px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+.run-line .status { padding: 0; }
+.run-line a { color: var(--credit); }
 .admin-body { display: grid; gap: 8px; padding-bottom: 14px; }
 .admin-jobs .careers-edit { border-top: 0; padding-top: 0; }
 .admin-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 14px; }

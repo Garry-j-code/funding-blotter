@@ -1,5 +1,15 @@
-import { useMemo, useState } from "react";
-import { addCareersCompany, ROLE_TYPES, removeCareersCompany, roleLabel, saveCareers, timeAgo } from "./api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  addCareersCompany,
+  fetchCareersRun,
+  ROLE_TYPES,
+  removeCareersCompany,
+  roleLabel,
+  saveCareers,
+  startCareersRun,
+  timeAgo,
+} from "./api";
+import type { CareersRun } from "./api";
 import type { Careers, CareersMap } from "./types";
 
 interface Props {
@@ -9,6 +19,7 @@ interface Props {
   onSetSecret: () => void;
   onSaved: (companyKey: string, entry: Careers) => void;
   onRemoved: (companyKey: string) => void;
+  onRefresh: () => void;
 }
 
 interface Row {
@@ -61,12 +72,94 @@ function statusText(e: Careers): string {
   }
 }
 
+/** "Run now": start the daily careers workflow on GitHub and watch it until it finishes. */
+function useCareersRun(isAdmin: boolean, onFinished: () => void) {
+  const [state, setState] = useState<{ configured: boolean; run: CareersRun | null } | null>(null);
+  const [msg, setMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
+  const [starting, setStarting] = useState(false);
+  const watchSince = useRef<number | null>(null);      // set when we started a run, so we notice it finishing
+  const finished = useRef(onFinished);
+  finished.current = onFinished;
+
+  const poll = async () => {
+    try {
+      const next = await fetchCareersRun();
+      setState(next);
+      const since = watchSince.current;
+      if (since && next.run && !next.run.active && Date.parse(next.run.created_at) >= since - 30000) {
+        watchSince.current = null;
+        setMsg({
+          text: next.run.conclusion === "success" ? "Careers run finished. Roles updated." : `Careers run ended: ${next.run.conclusion ?? next.run.status}.`,
+          kind: next.run.conclusion === "success" ? "ok" : "err",
+        });
+        finished.current();
+      }
+    } catch {
+      /* status is optional */
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) void poll();
+    else setState(null);
+  }, [isAdmin]);
+
+  const active = Boolean(state?.run?.active) || watchSince.current !== null;
+  useEffect(() => {
+    if (!isAdmin || !active) return;
+    const id = setInterval(() => void poll(), 8000);
+    const stop = setTimeout(() => { watchSince.current = null; }, 30 * 60 * 1000);
+    return () => { clearInterval(id); clearTimeout(stop); };
+  }, [isAdmin, active]);
+
+  const start = async () => {
+    setStarting(true);
+    setMsg(null);
+    try {
+      const text = await startCareersRun();
+      watchSince.current = Date.now();
+      setMsg({ text, kind: "ok" });
+      setTimeout(() => void poll(), 4000);
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : String(e), kind: "err" });
+      void poll();
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  return { state, msg, start, starting, running: Boolean(state?.run?.active) || watchSince.current !== null };
+}
+
+const ago = (iso: string) => {
+  const mins = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
+  if (Number.isNaN(mins)) return "";
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+};
+
+function RunStatus({ state, running }: { state: { configured: boolean; run: CareersRun | null } | null; running: boolean }) {
+  const run = state?.run;
+  if (!state) return null;
+  if (!state.configured) return <span className="careers-age">Run now is not set up on the server (GITHUB_PAT missing).</span>;
+  if (running) return <span className="careers-age">Careers run in progress…{run ? <> <a href={run.html_url} target="_blank" rel="noopener noreferrer">view</a></> : null}</span>;
+  if (!run) return <span className="careers-age">Careers workflow has not run yet.</span>;
+  return (
+    <span className="careers-age">
+      Last careers run: {run.conclusion ?? run.status}, {ago(run.created_at)} ·{" "}
+      <a href={run.html_url} target="_blank" rel="noopener noreferrer">view</a>
+    </span>
+  );
+}
+
 /** The Jobs page: every open role we have fetched, plus (admin) a form to add a careers URL for a company. */
-export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSaved, onRemoved }: Props) {
+export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSaved, onRemoved, onRefresh }: Props) {
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
   const [q, setQ] = useState("");
   const [onlyNew, setOnlyNew] = useState(false);
+  const runner = useCareersRun(isAdmin, onRefresh);
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
@@ -161,12 +254,24 @@ export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSave
             onChange={(e) => setQ(e.target.value)}
           />
           <div className="actions">
+            {isAdmin && runner.state?.configured !== false && (
+              <button type="button" className="fetch-btn" disabled={runner.starting || runner.running} onClick={runner.start}>
+                {runner.running ? "Running…" : "Run now"}
+              </button>
+            )}
             <button type="button" className="token-btn" onClick={onSetSecret}>
               {isAdmin ? "Clear admin" : "Unlock admin"}
             </button>
           </div>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="run-line">
+          <RunStatus state={runner.state} running={runner.running} />
+          {runner.msg && <span className={`status ${runner.msg.kind}`} role="status">{runner.msg.text}</span>}
+        </div>
+      )}
 
       {isAdmin && <AdminCompanies careers={careers} onSaved={onSaved} onRemoved={onRemoved} />}
 

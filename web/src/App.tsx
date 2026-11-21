@@ -305,6 +305,7 @@ export default function App() {
           onSetSecret={onSetSecret}
           onSaved={onCareersSaved}
           onRemoved={onCareersRemoved}
+          onRefresh={() => fetchCareers().then(setCareers).catch(() => undefined)}
         />
       ) : (
         <>
