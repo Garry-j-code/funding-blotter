@@ -142,7 +142,7 @@ const ago = (iso: string) => {
 function RunStatus({ state, running }: { state: { configured: boolean; run: CareersRun | null } | null; running: boolean }) {
   const run = state?.run;
   if (!state) return null;
-  if (!state.configured) return <span className="careers-age">Run now is not set up on the server (GITHUB_PAT missing).</span>;
+  if (!state.configured) return <span className="careers-age">Run now is disabled: the server has no GITHUB_PAT (set it in Netlify, or in .env when running locally).</span>;
   if (running) return <span className="careers-age">Careers run in progress…{run ? <> <a href={run.html_url} target="_blank" rel="noopener noreferrer">view</a></> : null}</span>;
   if (!run) return <span className="careers-age">Careers workflow has not run yet.</span>;
   return (
@@ -254,8 +254,14 @@ export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSave
             onChange={(e) => setQ(e.target.value)}
           />
           <div className="actions">
-            {isAdmin && runner.state?.configured !== false && (
-              <button type="button" className="fetch-btn" disabled={runner.starting || runner.running} onClick={runner.start}>
+            {isAdmin && (
+              <button
+                type="button"
+                className="fetch-btn"
+                disabled={runner.starting || runner.running || runner.state?.configured === false}
+                title={runner.state?.configured === false ? "Needs GITHUB_PAT on the server" : "Start the daily careers run now"}
+                onClick={runner.start}
+              >
                 {runner.running ? "Running…" : "Run now"}
               </button>
             )}
