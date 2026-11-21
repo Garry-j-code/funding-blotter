@@ -10,7 +10,7 @@ Engineer**, and show them on the company's card. The careers URL is visible to
 everyone and editable by the admin. A daily automation keeps it fresh.
 
 ### Decisions already made (from our conversation)
-- Match the four titles **plus close variants** (see section 5.3).
+- Match the four titles **plus close variants** (see section 5.3). After the first dry run this was made strict: ML Engineer, AI Security/Operations Engineer, generic "Software Engineer, AI" titles and "Forward Deployed Banker/Auditor" are no longer matched.
 - Unverified board guesses are visible **to the admin only**, tagged "unverified".
 - A separate Jobs page is **out of scope for now** ("after this task").
 - Data comes from the **public job-board APIs** of Ashby, Greenhouse, Lever and
@@ -40,56 +40,62 @@ everyone and editable by the admin. A daily automation keeps it fresh.
  React SPA: "Careers" option on each DealRow
 ```
 
-## 3. Data model (new migration `supabase/migrations/002_careers.sql`)
+## 3. Data model (already applied in Supabase)
+
+The SQL below was run once in the Supabase SQL editor. The migration files were then removed
+from the repo to keep it clean, so this is the record of the careers schema.
 
 ```sql
+-- Careers: each company's public job board and the matching open roles.
+-- Run once in the Supabase SQL editor. Only adds new tables; nothing existing changes.
+
 CREATE TABLE IF NOT EXISTS company_careers (
-    company_key         TEXT PRIMARY KEY,         -- same key as deals.company_key
-    company             TEXT,                     -- display name at discovery time
-    careers_url         TEXT,                     -- what users see; admin editable
-    ats                 TEXT,                     -- ashby|greenhouse|lever|workable|custom|none
-    ats_slug            TEXT,                     -- board token for the ATS API
-    source              TEXT NOT NULL DEFAULT 'auto',   -- auto | manual (manual is never overwritten)
-    verified            BOOLEAN NOT NULL DEFAULT FALSE,
-    status              TEXT NOT NULL DEFAULT 'pending',-- pending|ok|no_board|unverified|error|unsupported
-    needs_refresh       BOOLEAN NOT NULL DEFAULT FALSE, -- set when admin edits the URL
+    company_key         TEXT PRIMARY KEY,                  -- same key as deals.company_key
+    company             TEXT,                              -- display name at discovery time
+    careers_url         TEXT,                              -- what users see; admin editable
+    ats                 TEXT,                              -- ashby | greenhouse | lever | workable | custom | none
+    ats_slug            TEXT,                              -- board token for the job system's public API
+    source              TEXT NOT NULL DEFAULT 'auto',      -- auto | manual (manual is never overwritten)
+    verified            BOOLEAN NOT NULL DEFAULT FALSE,    -- false = a guess; only the admin sees it
+    status              TEXT NOT NULL DEFAULT 'pending',   -- pending | ok | no_board | unverified | error | unsupported
+    needs_refresh       BOOLEAN NOT NULL DEFAULT FALSE,    -- set when the admin edits the URL
+    empty_streak        INT NOT NULL DEFAULT 0,            -- consecutive runs where a board with open roles came back empty
     consecutive_errors  INT NOT NULL DEFAULT 0,
     last_checked        TIMESTAMPTZ,
     last_ok             TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
-    id            BIGSERIAL PRIMARY KEY,
-    company_key   TEXT NOT NULL REFERENCES company_careers(company_key) ON DELETE CASCADE,
-    external_id   TEXT NOT NULL,                  -- the ATS's own posting id
-    title         TEXT NOT NULL,
-    role_type     TEXT NOT NULL,                  -- primary match (see 5.3)
-    tags          TEXT[] NOT NULL DEFAULT '{}',   -- every role type it matched
-    department    TEXT,
-    location      TEXT,
-    employment_type TEXT,
-    url           TEXT NOT NULL,
-    posted_at     TIMESTAMPTZ,
-    first_seen    DATE NOT NULL,
-    last_seen     DATE NOT NULL,
-    closed_at     DATE,
-    is_open       BOOLEAN NOT NULL DEFAULT TRUE,
+    id               BIGSERIAL PRIMARY KEY,
+    company_key      TEXT NOT NULL REFERENCES company_careers (company_key) ON DELETE CASCADE,
+    external_id      TEXT NOT NULL,                        -- the job system's own posting id
+    title            TEXT NOT NULL,
+    role_type        TEXT NOT NULL,                        -- primary match: forward_deployed_engineer | ai_product_engineer | product_engineer | ai_engineer
+    tags             TEXT[] NOT NULL DEFAULT '{}',         -- every role type the title matched
+    department       TEXT,
+    location         TEXT,
+    employment_type  TEXT,
+    url              TEXT NOT NULL,
+    posted_at        TIMESTAMPTZ,
+    first_seen       DATE NOT NULL,
+    last_seen        DATE NOT NULL,
+    closed_at        DATE,
+    is_open          BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (company_key, external_id)
 );
+
 CREATE INDEX IF NOT EXISTS idx_jobs_company_open ON jobs (company_key) WHERE is_open;
 
+-- RLS: deny public access; the service-role key (pipeline + Netlify Functions) bypasses RLS.
 ALTER TABLE company_careers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
 ```
-
-**You run this once in the Supabase SQL editor** (I cannot create tables from here).
-Only new tables are added; nothing existing changes.
 
 ## 4. Where the work lives
 
 | Piece | Files |
 |---|---|
-| Migration | `supabase/migrations/002_careers.sql` |
+| Migration | applied by hand in Supabase (SQL in section 3) |
 | Backend | `src/jobs.py` (CLI + logic), `src/supabase_store.py` (new methods), `config.yaml` (`jobs:` section) |
 | API | `netlify/functions/careers.ts`, `_lib.ts` (PUT in CORS, URL validator) |
 | UI | `web/src/Careers.tsx` (new), `App.tsx`, `api.ts`, `types.ts`, `blotter.css` |
@@ -129,7 +135,7 @@ companies from the daily deal pipeline are picked up automatically on the next r
 | `forward_deployed_engineer` | "Forward Deployed Engineer/Engineering/AI Engineer", "FDE" |
 | `ai_product_engineer` | titles with "Product Engineer" **and** a standalone "AI" |
 | `product_engineer` | "Product Engineer" incl. Founding/Senior/Staff |
-| `ai_engineer` | "AI Engineer", "Applied AI", "AI/ML Engineer", "Machine Learning Engineer", "ML Engineer", "LLM Engineer", "GenAI Engineer", "Software Engineer, AI", "Software Engineer (AI-Native)" |
+| `ai_engineer` | "AI Engineer", "Applied AI Engineer", "AI/ML Engineer", "AI Software Engineer", "LLM Engineer", "GenAI Engineer" (not ML Engineer, not "Software Engineer, AI") |
 
 Rules: a title needs engineer/engineering/developer in it (except FDE). Titles with
 manager, director, head of, recruiter, sales, account executive, marketing are excluded.
@@ -225,7 +231,7 @@ No test suite exists today, so this adds a small one (`pytest` as a dev dependen
 | # | Phase | Output | Your checkpoint |
 |---|---|---|---|
 | 0 | Prep | Commit the existing uncommitted work first (recommended) and branch `feature/careers` | OK to commit? |
-| 1 | Schema | `002_careers.sql` | **You run it in the Supabase SQL editor** |
+| 1 | Schema | SQL in section 3 | done: you ran it in the Supabase SQL editor |
 | 2 | Backend + tests | `src/jobs.py`, store methods, config, tests passing | Review the matching list |
 | 3 | First data | Dry-run report, then the real run over ~450 companies | Approve the dry-run before any write |
 | 4 | API | `careers.ts`, admin PUT | Local curl results |
@@ -249,3 +255,36 @@ No test suite exists today, so this adds a small one (`pytest` as a dev dependen
 2. Daily time: **11:00 UTC** (about 6-7am New York).
 3. Interns and all seniorities included: **default yes**.
 4. "Refresh now" button: **v2**.
+
+## 10. Addendum: custom careers pages (added after the first real run)
+
+A URL the admin saves that is not an Ashby/Greenhouse/Lever/Workable board (`ats = custom`) is no longer
+just displayed. Each run (daily while it yields roles or errors, otherwise every `retry_no_board_days`):
+
+1. The page is fetched once (public host only, robots.txt respected, redirects re-checked).
+2. If it links or embeds a supported job board, that board is used through its API like any other board;
+   the admin's URL stays as the card's link (`ats`/`ats_slug` are filled in, `source` stays `manual`).
+3. Otherwise any schema.org `JobPosting` JSON-LD on the page is used (`ats = custom`, `status = ok`,
+   job ids prefixed `ld:`).
+4. Otherwise `status = unsupported`: the link is shown, no roles. Roles from an earlier source are retired
+   through the normal "hold one run, then close" rule. A page that cannot be fetched never closes roles.
+
+Pages that render their jobs with JavaScript or list them as plain text stay `unsupported`; the admin can still
+point the URL at the company's real job board when they find one. The API sends `roles_tracked` so the panel
+can say whether roles are being fetched for the company.
+
+## 11. Addendum: the Jobs page
+
+`#/jobs` (header: Blotter | Jobs) lists every open role that has been fetched, newest first, with role and
+company filters, a search box and a NEW filter. Everyone can see it; visitors only get roles from verified boards.
+
+Admins also get an "Add a careers URL" form: company name + URL.
+- A name whose `company_key` already exists in the blotter is rejected with "open its card and add the URL in its
+  Careers panel" (HTTP 409). A name already added here is also rejected (edit its URL in the list instead).
+- Otherwise a **standalone** company is saved: a `company_careers` row with `source = manual` and no deal. The daily run
+  processes these like blotter companies (`standalone_companies()` in `src/jobs.py`), so the URL is read on the next run.
+- The admin list under the form shows each standalone company's status, lets the admin edit its URL, and remove it
+  (its roles are deleted with it). Blotter companies cannot be removed this way.
+- API: `POST /api/careers`, `PUT` and `DELETE /api/careers/:company_key` (all admin only). `GET` now includes `company`
+  and, for the admin, `standalone` and `needs_refresh`.
+

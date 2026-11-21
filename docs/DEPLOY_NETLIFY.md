@@ -3,7 +3,7 @@
 ## 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor** and run [`supabase/migrations/001_initial.sql`](../supabase/migrations/001_initial.sql).
+2. Open **SQL Editor** and create the tables. The initial schema SQL is no longer kept in the repo; recover it from git history with `git show f6e7c52:supabase/migrations/001_initial.sql`, and see `docs/PLAN_CAREERS.md` section 3 for the careers tables.
 3. Copy **Project URL** and **service_role** key (Settings → API).
 4. Migrate existing SQLite data (optional, one time):
 
