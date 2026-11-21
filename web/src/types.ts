@@ -32,6 +32,7 @@ export interface CareerJob {
 /** One company's careers data. The last four fields are only sent to the admin. */
 export interface Careers {
   company?: string;
+  added_at?: string | null;         // YYYY-MM-DD: newest blotter date, or the day it was added on the Jobs page
   careers_url: string | null;
   ats: string | null;
   roles_tracked?: boolean;          // false: a saved page we cannot read roles from

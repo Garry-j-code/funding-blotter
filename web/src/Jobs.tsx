@@ -24,12 +24,27 @@ interface Row {
   postedAt: string | null;
   isNew: boolean;
   unverified: boolean;
+  addedAt: string;
+}
+
+interface Group {
+  key: string;
+  company: string;
+  careersUrl: string | null;
+  addedAt: string;
+  unverified: boolean;
+  rows: Row[];
 }
 
 const prettyDate = (iso?: string | null) => {
   if (!iso) return "";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+const prettyDay = (day: string) => {
+  const d = new Date(`${day}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
 function statusText(e: Careers): string {
@@ -60,16 +75,15 @@ export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSave
         out.push({
           id: j.id, key, company: e.company || key, careersUrl: e.careers_url, title: j.title, url: j.url,
           location: j.location ?? null, roleType: j.role_type, firstSeen: j.first_seen, postedAt: j.posted_at ?? null,
-          isNew: j.is_new, unverified: isAdmin && e.verified === false,
+          isNew: j.is_new, unverified: isAdmin && e.verified === false, addedAt: e.added_at ?? "",
         });
       }
     }
-    // Newest first: the day we first saw the role, then the date the company posted it, then A-Z.
+    // Within a company: newest first (the day we first saw the role, then the date the company posted it).
     out.sort(
       (a, b) =>
         b.firstSeen.localeCompare(a.firstSeen) ||
         (b.postedAt ?? "").localeCompare(a.postedAt ?? "") ||
-        a.company.localeCompare(b.company) ||
         a.title.localeCompare(b.title),
     );
     return out;
@@ -88,7 +102,20 @@ export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSave
       (!onlyNew || r.isNew) &&
       (!query || `${r.title} ${r.company} ${r.location ?? ""}`.toLowerCase().includes(query)),
   );
-  const shownCompanies = new Set(shown.map((r) => r.key)).size;
+  // Group by company; companies are ordered by the date they were added, newest first.
+  const groups = useMemo<Group[]>(() => {
+    const byKey = new Map<string, Group>();
+    for (const r of shown) {
+      let g = byKey.get(r.key);
+      if (!g) {
+        g = { key: r.key, company: r.company, careersUrl: r.careersUrl, addedAt: r.addedAt, unverified: r.unverified, rows: [] };
+        byKey.set(r.key, g);
+      }
+      g.rows.push(r);
+    }
+    return [...byKey.values()].sort((a, b) => b.addedAt.localeCompare(a.addedAt) || a.company.localeCompare(b.company));
+  }, [shown]);
+  const shownCompanies = groups.length;
 
   return (
     <main id="jobs-page">
@@ -141,6 +168,8 @@ export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSave
         </div>
       </div>
 
+      {isAdmin && <AdminCompanies careers={careers} onSaved={onSaved} onRemoved={onRemoved} />}
+
       <div className="daybar">
         <span>Open roles</span>
         <span>
@@ -154,31 +183,39 @@ export default function JobsPage({ careers, loaded, isAdmin, onSetSecret, onSave
           {rows.length === 0 ? "No open roles have been fetched yet." : "No roles match. Widen the filters or clear the search."}
         </div>
       )}
-      <ul className="jobs-list">
-        {shown.map((r) => (
-          <li key={r.id} className="jobs-row">
-            <a className="jobs-title" href={r.url} target="_blank" rel="noopener noreferrer">
-              {r.title}
-            </a>
-            <div className="job-meta">
-              {r.careersUrl ? (
-                <a className="jobs-company" href={r.careersUrl} target="_blank" rel="noopener noreferrer">
-                  {r.company}
+      {groups.map((g) => (
+        <section key={g.key} className="jobs-group">
+          <div className="jobs-group-head">
+            {g.careersUrl ? (
+              <a className="jobs-company" href={g.careersUrl} target="_blank" rel="noopener noreferrer">
+                {g.company}
+              </a>
+            ) : (
+              <span className="jobs-company">{g.company}</span>
+            )}
+            {g.addedAt && <span className="careers-age">added {prettyDay(g.addedAt)}</span>}
+            {g.unverified && <span className="careers-warn">unverified board</span>}
+            <span className="careers-age">
+              {g.rows.length} role{g.rows.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <ul className="jobs-list">
+            {g.rows.map((r) => (
+              <li key={r.id} className="jobs-row">
+                <a className="jobs-title" href={r.url} target="_blank" rel="noopener noreferrer">
+                  {r.title}
                 </a>
-              ) : (
-                <span className="jobs-company">{r.company}</span>
-              )}
-              {r.location && <span>{r.location}</span>}
-              <span className="chip-role">{roleLabel(r.roleType)}</span>
-              {r.isNew && <span className="badge-new">New</span>}
-              {r.unverified && <span className="careers-warn">unverified board</span>}
-              <span>{prettyDate(r.postedAt || r.firstSeen)}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      {isAdmin && <AdminCompanies careers={careers} onSaved={onSaved} onRemoved={onRemoved} />}
+                <div className="job-meta">
+                  {r.location && <span>{r.location}</span>}
+                  <span className="chip-role">{roleLabel(r.roleType)}</span>
+                  {r.isNew && <span className="badge-new">New</span>}
+                  <span>{prettyDate(r.postedAt || r.firstSeen)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </main>
   );
 }
@@ -195,7 +232,7 @@ function AdminCompanies({
 
   const mine = Object.entries(careers)
     .filter(([, e]) => e.standalone)
-    .sort((a, b) => (a[1].company || a[0]).localeCompare(b[1].company || b[0]));
+    .sort((a, b) => (b[1].added_at ?? "").localeCompare(a[1].added_at ?? "") || (a[1].company || a[0]).localeCompare(b[1].company || b[0]));
 
   const add = async (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -243,11 +280,14 @@ function AdminCompanies({
       {msg && <div className={`status ${msg.kind}`} role={msg.kind === "err" ? "alert" : "status"}>{msg.text}</div>}
 
       {mine.length > 0 && (
-        <ul className="admin-list">
-          {mine.map(([key, e]) => (
-            <AdminRow key={key} companyKey={key} entry={e} onSaved={onSaved} onRemoved={onRemoved} />
-          ))}
-        </ul>
+        <details className="admin-details">
+          <summary>Companies you added ({mine.length}), newest first</summary>
+          <ul className="admin-list">
+            {mine.map(([key, e]) => (
+              <AdminRow key={key} companyKey={key} entry={e} onSaved={onSaved} onRemoved={onRemoved} />
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );

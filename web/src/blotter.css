@@ -224,8 +224,15 @@ body {
 .nav a:hover { border-color: var(--ink); color: var(--ink); }
 .nav a[aria-current="page"] { background: var(--ink); border-color: var(--ink); color: var(--ledger); }
 .nav a:focus-visible { outline: 2px solid var(--credit); outline-offset: 2px; }
+.jobs-group { margin-top: 6px; }
+.jobs-group-head {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 22px 0 4px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; border-bottom: 1px solid var(--ink);
+}
+.jobs-group-head .jobs-company { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; }
+.admin-details summary { cursor: pointer; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
 .jobs-list { list-style: none; margin: 0; padding: 0; }
-.jobs-row { padding: 12px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 4px; }
+.jobs-row { padding: 10px 0; border-bottom: 1px solid var(--rule); display: grid; gap: 4px; }
 .jobs-title { font-family: Newsreader, Georgia, serif; font-size: 18px; color: var(--ink); overflow-wrap: anywhere; }
 .jobs-row .job-meta { font-family: 'IBM Plex Mono', monospace; font-size: 11px; align-items: center; }
 .jobs-company { color: var(--ink); font-weight: 500; }

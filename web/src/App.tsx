@@ -128,7 +128,7 @@ export default function App() {
   }, []);
 
   const onCareersSaved = useCallback((key: string, entry: Careers) => {
-    setCareers((prev) => ({ ...prev, [key]: entry }));
+    setCareers((prev) => ({ ...prev, [key]: { ...entry, added_at: entry.added_at ?? prev[key]?.added_at } }));
   }, []);
 
   useEffect(() => {

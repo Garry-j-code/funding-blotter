@@ -36,9 +36,10 @@ function publicJob(j: Row) {
   };
 }
 
-function entry(care: Row, jobs: Row[], admin: boolean, standalone?: boolean) {
+function entry(care: Row, jobs: Row[], admin: boolean, standalone?: boolean, addedAt?: string | null) {
   const out: Row = {
     company: care.company,
+    added_at: addedAt ?? null,   // newest blotter date for the company, or the day it was added on the Jobs page
     careers_url: care.careers_url,
     ats: care.ats,
     last_checked: care.last_checked,
@@ -86,9 +87,15 @@ export default async (req: Request, _context: Context) => {
       const [careers, openJobs, dealRows] = await Promise.all([
         fetchAll(sb, "company_careers", "company_key"),
         fetchAll(sb, "jobs", "id", (q) => q.eq("is_open", true)),
-        admin ? fetchAll(sb, "deals", "id", undefined, "id,company_key") : Promise.resolve([] as Row[]),
+        fetchAll(sb, "deals", "id", undefined, "id,company_key,published_at"),
       ]);
-      const dealKeys = new Set(dealRows.map((d) => d.company_key));
+      const dealKeys = new Set<string>();
+      const latestDeal: Record<string, string> = {};     // company_key -> newest published_at in the blotter
+      for (const d of dealRows) {
+        dealKeys.add(d.company_key);
+        const day = String(d.published_at || "").slice(0, 10);
+        if (day && day > (latestDeal[d.company_key] || "")) latestDeal[d.company_key] = day;
+      }
       const jobsByCompany: Record<string, Row[]> = {};
       for (const j of openJobs) (jobsByCompany[j.company_key] ||= []).push(j);
 
@@ -100,7 +107,9 @@ export default async (req: Request, _context: Context) => {
         const jobs = (jobsByCompany[c.company_key] || []).sort(
           (a, b) => (b.first_seen || "").localeCompare(a.first_seen || ""),
         );
-        result[c.company_key] = entry(c, jobs, admin, c.source === "manual" && !dealKeys.has(c.company_key));
+        const standalone = c.source === "manual" && !dealKeys.has(c.company_key);
+        const addedAt = standalone ? String(c.created_at || "").slice(0, 10) || null : latestDeal[c.company_key] || null;
+        result[c.company_key] = entry(c, jobs, admin, standalone, addedAt);
       }
       return json(result);
     }
@@ -146,7 +155,7 @@ export default async (req: Request, _context: Context) => {
       };
       const { error: insErr } = await sb.from("company_careers").upsert(row, { onConflict: "company_key" });
       if (insErr) return json({ error: insErr.message }, 500);
-      return json({ company_key: key, ...entry(row, [], true, true) }, 201);
+      return json({ company_key: key, ...entry(row, [], true, true, new Date().toISOString().slice(0, 10)) }, 201);
     }
 
     // ---- DELETE /api/careers/:company_key : admin removes a company they added here ----

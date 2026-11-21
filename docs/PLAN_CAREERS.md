@@ -288,3 +288,12 @@ Admins also get an "Add a careers URL" form: company name + URL.
 - API: `POST /api/careers`, `PUT` and `DELETE /api/careers/:company_key` (all admin only). `GET` now includes `company`
   and, for the admin, `standalone` and `needs_refresh`.
 
+Ordering: roles are grouped by company, and companies are ordered by the date they were added, newest first. For a
+blotter company that is the newest `published_at` among its deals; for a company added on the Jobs page it is the day
+it was added (`company_careers.created_at`). The API sends it as `added_at`. `created_at` needs this one-time SQL
+(run in the Supabase SQL editor); without it, companies added on the Jobs page have no date and sort last:
+
+```sql
+ALTER TABLE company_careers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+```
+
