@@ -12,3 +12,8 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "supabase>=2.31.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

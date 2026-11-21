@@ -1,0 +1,74 @@
+[
+ {
+  "categories": {
+   "commitment": "Regular Full Time (Salary)",
+   "department": "Customer Success",
+   "location": "Atlanta, Georgia",
+   "team": "Customer Success Team",
+   "allLocations": [
+    "Atlanta, Georgia"
+   ]
+  },
+  "createdAt": 1788199939703,
+  "descriptionPlain": "This is a test job - created by Alex Haugan, for testing candidate insights.\n\u00a0\nJoin a scaling, tight-knit team that\u2019s working directly with innovative talent acquisition teams and thought leaders across various industries and geographies to make hiring a strategic advantage for their organizations. ",
+  "id": "ad208490-4052-4f91-a57e-433f2d1e484b",
+  "salaryRange": {
+   "min": 85000,
+   "max": 175000,
+   "currency": "USD",
+   "interval": "per-year-salary"
+  },
+  "text": "Customer Success Manager",
+  "country": "US",
+  "workplaceType": "hybrid",
+  "descriptionBodyPlain": "This is a test job - created by Alex Haugan, for testing candidate insights.\n\u00a0\nJoin a scaling, tight-knit team that\u2019s working directly with innovative talent acquisition teams and thought leaders across various industries and geographies to make hiring a strategic advantage for their organizations. You'll serve as an advisor to our customers and take a consultative approach to ensure customers are setup for long-term success as high performing hiring organizations using the Lever product suite.\n\u00a0\nAs a Customer Success Manager on the Customer Advocacy team, you will be our customers biggest champion and make their voice heard in everything we do- the problems we help solve, the solutions we build and the consultation we deliver. You will do that by building trusting partnerships with our customers and consistently empowering them to achieve their ongoing talent goals with Lever. We advocate for our customers by working across Lever to deliver solutions and share our learnings internally to help shape our products.\n\u00a0\nWe are looking for someone who is experienced in building lasting customer relationships and is passionate about making meaningful contributions to our customer\u2019s success. Don\u2019t be mistaken, this is a challenging career path but also highly rewarding. Are you up for the challenge? If so, stop reading and start applying.\n",
+  "hostedUrl": "https://jobs.lever.co/leverdemo/ad208490-4052-4f91-a57e-433f2d1e484b",
+  "applyUrl": "https://jobs.lever.co/leverdemo/ad208490-4052-4f91-a57e-433f2d1e484b/apply"
+ },
+ {
+  "categories": {
+   "commitment": "Regular Full Time (Salary)",
+   "department": "People (HR)",
+   "location": "Houston, TX",
+   "team": "People",
+   "allLocations": [
+    "Houston, TX"
+   ]
+  },
+  "createdAt": 1787600587936,
+  "descriptionPlain": "",
+  "id": "120b5976-ee4e-4dc5-b31b-2b1ca124460c",
+  "salaryRange": {
+   "min": 150000,
+   "max": 185000,
+   "currency": "USD",
+   "interval": "per-year-salary"
+  },
+  "text": "Dentist",
+  "country": "US",
+  "workplaceType": "onsite",
+  "descriptionBodyPlain": "",
+  "hostedUrl": "https://jobs.lever.co/leverdemo/120b5976-ee4e-4dc5-b31b-2b1ca124460c",
+  "applyUrl": "https://jobs.lever.co/leverdemo/120b5976-ee4e-4dc5-b31b-2b1ca124460c/apply"
+ },
+ {
+  "categories": {
+   "commitment": "Regular Full Time (Salary)",
+   "department": "Executive",
+   "location": "London, UK",
+   "team": "Executive",
+   "allLocations": [
+    "London, UK"
+   ]
+  },
+  "createdAt": 1718633877107,
+  "descriptionPlain": "",
+  "id": "1dbf02a6-d434-4e47-8d66-3aba2c17bed1",
+  "text": "Director of Diversity, Equity, and Inclusion",
+  "country": "GB",
+  "workplaceType": "onsite",
+  "descriptionBodyPlain": "",
+  "hostedUrl": "https://jobs.lever.co/leverdemo/1dbf02a6-d434-4e47-8d66-3aba2c17bed1",
+  "applyUrl": "https://jobs.lever.co/leverdemo/1dbf02a6-d434-4e47-8d66-3aba2c17bed1/apply"
+ }
+]

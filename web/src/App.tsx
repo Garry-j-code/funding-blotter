@@ -1,23 +1,55 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   dayLabel,
+  fetchCareers,
   fetchDeals,
+  fetchMonths,
+  BASE_STAGES,
   filterDeals,
   fmtAmount,
   removeDeal,
   sectorLabel,
   srcLabel,
+  stageKey,
   triggerFetch,
 } from "./api";
-import type { Deal, FilterMode } from "./types";
+import CareersPanel from "./Careers";
+import DateRangePicker from "./DateRangePicker";
+import JobsPage from "./Jobs";
+import type { MonthInfo } from "./api";
+import type { Careers, CareersMap, Deal, FilterMode } from "./types";
 
 const MODES: { id: FilterMode; label: string }[] = [
   { id: "all", label: "All" },
   { id: "priority", label: "Flagged" },
-  { id: "early", label: "Seed & A" },
   { id: "disclosed", label: "Disclosed" },
   { id: "over5m", label: "Over $5M" },
 ];
+
+const ALL_TIME = "all";
+
+type View = "blotter" | "jobs";
+const viewFromHash = (): View => (window.location.hash === "#/jobs" ? "jobs" : "blotter");
+
+function currentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthBounds(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 const SECRET_KEY = "blotter_admin_secret";
 
@@ -32,35 +64,114 @@ export default function App() {
   const [status, setStatus] = useState("");
   const [statusKind, setStatusKind] = useState<"" | "ok" | "err">("");
   const [mode, setMode] = useState<FilterMode>("all");
+  const [stage, setStage] = useState("");
   const [q, setQ] = useState("");
-  const [date, setDate] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [month, setMonth] = useState(currentMonth);
+  const [monthList, setMonthList] = useState<MonthInfo[]>([]);
+  const [careers, setCareers] = useState<CareersMap>({});
+  const [careersLoaded, setCareersLoaded] = useState(false);
+  const [view, setView] = useState<View>(viewFromHash);
   const [busy, setBusy] = useState(false);
   const [isAdmin, setIsAdmin] = useState(hasAdminSecret);
 
   const load = useCallback(async () => {
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setError("The From date is after the To date.");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
-      const rows = await fetchDeals(30);
+      // A date range, when set, takes precedence over the month selection.
+      const rows =
+        dateFrom || dateTo
+          ? await fetchDeals({ from: dateFrom, to: dateTo })
+          : month === ALL_TIME
+            ? await fetchDeals({ windowDays: 0 })
+            : await fetchDeals(monthBounds(month));
       setDeals(rows);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [month, dateFrom, dateTo]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const dates = useMemo(() => {
-    return [...new Set(deals.map((d) => d.published_at).filter(Boolean))].sort();
-  }, [deals]);
+  useEffect(() => {
+    const onHash = () => setView(viewFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    fetchCareers()
+      .then(setCareers)
+      .catch(() => {
+        /* careers are optional; cards just show no careers info */
+      })
+      .finally(() => setCareersLoaded(true));
+  }, [isAdmin]);
+
+  const onCareersRemoved = useCallback((key: string) => {
+    setCareers((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
+  const onCareersSaved = useCallback((key: string, entry: Careers) => {
+    setCareers((prev) => ({ ...prev, [key]: { ...entry, added_at: entry.added_at ?? prev[key]?.added_at } }));
+  }, []);
+
+  useEffect(() => {
+    fetchMonths()
+      .then(setMonthList)
+      .catch(() => {
+        /* month list is optional; the current month still works */
+      });
+  }, []);
+
+  // Months that have data, newest first. The current month is always offered,
+  // since it is the default even when it has no deals yet.
+  const monthOptions = useMemo(() => {
+    const byMonth = new Map(monthList.map((m) => [m.month, m.count]));
+    const cur = currentMonth();
+    if (!byMonth.has(cur)) byMonth.set(cur, 0);
+    return [...byMonth.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([m, count]) => ({ month: m, count }));
+  }, [monthList]);
+
+  const rangeActive = Boolean(dateFrom || dateTo);
+
+  // Seed + Series A-H are always offered; any other stage seen in the loaded
+  // deals (Pre-Seed, Debt, Strategic, ...) is added after them. The selected
+  // stage is kept even if the current month has no deals of that stage.
+  const stageOptions = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const d of deals) {
+      const k = stageKey(d.stage);
+      seen.set(k, (seen.get(k) || 0) + 1);
+    }
+    if (stage && !BASE_STAGES.includes(stage)) seen.set(stage, seen.get(stage) || 0);
+    const others = [...seen.entries()]
+      .filter(([k]) => !BASE_STAGES.includes(k))
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([k]) => k);
+    return [...BASE_STAGES, ...others];
+  }, [deals, stage]);
 
   const visible = useMemo(
-    () => filterDeals(deals, mode, q, date),
-    [deals, mode, q, date],
+    () => filterDeals(deals, mode, q, dateFrom, dateTo, stage),
+    [deals, mode, q, dateFrom, dateTo, stage],
   );
 
   const groups = useMemo(() => {
@@ -146,7 +257,19 @@ export default function App() {
     setStatusMsg("Admin unlocked in this browser only. Fetch and Remove are now available here.", "ok");
   };
 
-  const built = new Date().toUTCString().slice(5, 22).toUpperCase() + " UTC";
+  // Shown in the viewer's own time zone (taken from the browser), e.g. "20 NOV 2026 17:56 GMT-6".
+  const built = new Date()
+    .toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short",
+    })
+    .replace(",", "")
+    .toUpperCase();
 
   return (
     <div className="wrap">
@@ -155,10 +278,37 @@ export default function App() {
         <div className="sub">
           finsmes &nbsp;·&nbsp; aifunding.me
           &nbsp;&nbsp;|&nbsp;&nbsp; built <b>{built}</b>
-          &nbsp;&nbsp;|&nbsp;&nbsp; <b>{visible.length} rounds</b>
+          {view === "blotter" ? (
+            <>
+              &nbsp;&nbsp;|&nbsp;&nbsp; <b>{visible.length} rounds</b>
+            </>
+          ) : (
+            <>&nbsp;&nbsp;|&nbsp;&nbsp; open roles from company job boards</>
+          )}
         </div>
+        <nav className="nav" aria-label="Pages">
+          <a href="#/" aria-current={view === "blotter" ? "page" : undefined}>
+            Blotter
+          </a>
+          <a href="#/jobs" aria-current={view === "jobs" ? "page" : undefined}>
+            Jobs
+          </a>
+        </nav>
         <div className="rule" />
       </header>
+
+      {view === "jobs" ? (
+        <JobsPage
+          careers={careers}
+          loaded={careersLoaded}
+          isAdmin={isAdmin}
+          onSetSecret={onSetSecret}
+          onSaved={onCareersSaved}
+          onRemoved={onCareersRemoved}
+          onRefresh={() => fetchCareers().then(setCareers).catch(() => undefined)}
+        />
+      ) : (
+        <>
 
       <div className="controls">
         <div className="chips">
@@ -173,6 +323,19 @@ export default function App() {
               {m.label}
             </button>
           ))}
+          <select
+            className={`chip chip-select${stage ? " on" : ""}`}
+            aria-label="Filter by funding stage"
+            value={stage}
+            onChange={(e) => setStage(e.target.value)}
+          >
+            <option value="">Stage: All</option>
+            {stageOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="toolbar">
           <input
@@ -184,24 +347,45 @@ export default function App() {
             onChange={(e) => setQ(e.target.value)}
           />
           <div className="date-wrap">
-            <label htmlFor="date-filter">Date</label>
-            <input
-              id="date-filter"
+            <label htmlFor="month-filter">Month</label>
+            <select
+              id="month-filter"
               className="date-filter"
-              type="date"
-              aria-label="Filter by date"
-              min={dates[0]}
-              max={dates[dates.length - 1]}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
+              aria-label="Month to show"
+              value={month}
+              disabled={rangeActive}
+              title={rangeActive ? "A date range is set. Clear it to use the month." : undefined}
+              onChange={(e) => setMonth(e.target.value)}
+            >
+              {monthOptions.map((m) => (
+                <option key={m.month} value={m.month}>
+                  {monthLabel(m.month)} ({m.count})
+                </option>
+              ))}
+              <option value={ALL_TIME}>All time</option>
+            </select>
+          </div>
+          <div className="date-wrap">
+            <label htmlFor="date-range">Dates</label>
+            <DateRangePicker
+              id="date-range"
+              from={dateFrom}
+              to={dateTo}
+              onChange={(f, t) => {
+                setDateFrom(f);
+                setDateTo(t);
+              }}
             />
             <button
               type="button"
               className="date-clear"
-              disabled={!date}
-              onClick={() => setDate("")}
+              disabled={!rangeActive}
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
             >
-              All
+              Clear
             </button>
           </div>
           <div className="actions">
@@ -254,6 +438,8 @@ export default function App() {
                   onRemove={onRemove}
                   busy={busy}
                   canRemove={isAdmin}
+                  careers={careers[d.company_key]}
+                  onCareersSaved={onCareersSaved}
                 />
               ))}
             </section>
@@ -274,6 +460,8 @@ export default function App() {
           </>
         )}
       </p>
+        </>
+      )}
     </div>
   );
 }
@@ -284,13 +472,19 @@ function DealRow({
   onRemove,
   busy,
   canRemove,
+  careers,
+  onCareersSaved,
 }: {
   deal: Deal;
   index: number;
   onRemove: (d: Deal) => void;
   busy: boolean;
   canRemove: boolean;
+  careers?: Careers;
+  onCareersSaved: (companyKey: string, entry: Careers) => void;
 }) {
+  const [showCareers, setShowCareers] = useState(false);
+  const roleCount = careers?.jobs.length ?? 0;
   const cls = ["deal", d.priority ? "pri" : "", d.score < 0 ? "dim" : ""]
     .filter(Boolean)
     .join(" ");
@@ -332,6 +526,16 @@ function DealRow({
           ) : (
             <span className="src">via {srcLabel(d.source)}</span>
           )}
+          <button
+            type="button"
+            className="careers-btn"
+            aria-expanded={showCareers}
+            title="Careers page and open roles"
+            onClick={() => setShowCareers((v) => !v)}
+          >
+            Careers
+            {roleCount > 0 && <span className="careers-count">{roleCount}</span>}
+          </button>
           {canRemove && (
             <button
               type="button"
@@ -344,6 +548,9 @@ function DealRow({
             </button>
           )}
         </div>
+        {showCareers && (
+          <CareersPanel deal={d} entry={careers} isAdmin={canRemove} onSaved={onCareersSaved} />
+        )}
       </div>
     </div>
   );

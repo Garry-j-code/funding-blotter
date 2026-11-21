@@ -98,8 +98,26 @@ class SupabaseStore:
         }
 
     def scanned_urls(self) -> set[str]:
-        resp = self.client.table("scanned_posts").select("url").execute()
-        return {r["url"] for r in (resp.data or []) if r.get("url")}
+        # Page through the table: Supabase caps a single response at 1000 rows, and
+        # scanned_posts grows past that, which made already-scanned URLs get
+        # downloaded and processed again.
+        urls: set[str] = set()
+        offset = 0
+        page = 1000
+        while True:
+            resp = (
+                self.client.table("scanned_posts")
+                .select("url")
+                .order("url")
+                .range(offset, offset + page - 1)
+                .execute()
+            )
+            chunk = resp.data or []
+            urls.update(r["url"] for r in chunk if r.get("url"))
+            if len(chunk) < page:
+                break
+            offset += page
+        return urls
 
     def mark_scanned(self, items: list[dict]) -> int:
         today = date.today().isoformat()
@@ -360,6 +378,56 @@ class SupabaseStore:
         if deleted:
             log.info("supabase: purged %d unrelated deals", deleted)
         return deleted
+
+    # ------------------------------------------------------------------
+    # Careers (see src/jobs.py). Supabase-only: there is no SQLite version.
+    # ------------------------------------------------------------------
+    def _all_rows(self, table: str, cols: str, order: str) -> list[dict]:
+        """Every row of a table (Supabase caps one response at 1000 rows)."""
+        rows: list[dict] = []
+        offset, page = 0, 1000
+        while True:
+            chunk = (
+                self.client.table(table).select(cols).order(order)
+                .range(offset, offset + page - 1).execute().data or []
+            )
+            rows.extend(chunk)
+            if len(chunk) < page:
+                return rows
+            offset += page
+
+    def deal_companies(self) -> list[dict]:
+        """One {company_key, company} per company in deals; newest row's name wins."""
+        by_key: dict[str, dict] = {}
+        for r in self._all_rows("deals", "id,company_key,company", "id"):
+            if r.get("company_key"):
+                by_key[r["company_key"]] = {"company_key": r["company_key"], "company": r["company"]}
+        return list(by_key.values())
+
+    def careers_all(self) -> dict[str, dict]:
+        rows = self._all_rows("company_careers", "*", "company_key")
+        return {r["company_key"]: r for r in rows}
+
+    def careers_upsert(self, row: dict) -> None:
+        self.client.table("company_careers").upsert(row, on_conflict="company_key").execute()
+
+    def jobs_all(self) -> dict[str, list[dict]]:
+        out: dict[str, list[dict]] = {}
+        for r in self._all_rows("jobs", "*", "id"):
+            out.setdefault(r["company_key"], []).append(r)
+        return out
+
+    def jobs_upsert(self, rows: list[dict]) -> None:
+        for i in range(0, len(rows), 200):
+            self.client.table("jobs").upsert(
+                rows[i:i + 200], on_conflict="company_key,external_id"
+            ).execute()
+
+    def jobs_close(self, ids: list[int], today: str) -> None:
+        for i in range(0, len(ids), 200):
+            self.client.table("jobs").update(
+                {"is_open": False, "closed_at": today}
+            ).in_("id", ids[i:i + 200]).execute()
 
 
 def _merge_fills_row(existing: dict, deal: dict) -> dict:

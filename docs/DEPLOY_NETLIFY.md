@@ -3,7 +3,7 @@
 ## 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor** and run [`supabase/migrations/001_initial.sql`](../supabase/migrations/001_initial.sql).
+2. Open **SQL Editor** and create the tables. The initial schema SQL is no longer kept in the repo; recover it from git history with `git show f6e7c52:supabase/migrations/001_initial.sql`, and see `docs/PLAN_CAREERS.md` section 3 for the careers tables.
 3. Copy **Project URL** and **service_role** key (Settings → API).
 4. Migrate existing SQLite data (optional, one time):
 
@@ -42,7 +42,7 @@ Run **Actions → daily blotter → Run workflow** (Mac or Windows runner online
 | `SUPABASE_URL` | API reads/writes |
 | `SUPABASE_SERVICE_ROLE_KEY` | API (never expose to browser) |
 | `ADMIN_SECRET` | Protects Remove + Fetch API |
-| `GITHUB_PAT` | Optional: server-side workflow dispatch |
+| `GITHUB_PAT` | Optional: server-side workflow dispatch. Used by **Fetch today's deals** and the Jobs page **Run now** button. Needs Actions read and write on the repo. |
 | `GITHUB_OWNER` | Default `Garry-j-code` |
 | `GITHUB_REPO` | Default `funding-blotter` |
 | `GITHUB_WORKFLOW` | Must be the **file name** `daily.yml` (default). Do **not** use the display name `daily blotter` or Pages workflows. |

@@ -1,0 +1,76 @@
+name: careers
+
+# Daily: find each company's public job board and sync its open Forward Deployed
+# Engineer / AI Engineer / Product Engineer / AI Product Engineer roles into Supabase.
+# The job-board APIs are public, so this runs on a normal GitHub runner (no self-hosted
+# runner needed, unlike the FinSMEs scrape in daily.yml).
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # 11:00 UTC daily (about 6-7am New York)
+  workflow_dispatch:
+    inputs:
+      company_key:
+        description: "Only this company_key (leave empty for all companies)"
+        required: false
+        default: ""
+      discover_only:
+        description: "Only look for job boards; do not refresh known ones"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: careers
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  careers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: |
+          uv python install 3.13
+          uv sync --frozen --python 3.13
+
+      - name: Check secrets
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          missing=0
+          for name in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name secret is not set."
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+
+      - name: Sync open roles
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Inputs go through env vars, never straight into the script (avoids script injection).
+          COMPANY_KEY: ${{ inputs.company_key }}
+          DISCOVER_ONLY: ${{ inputs.discover_only }}
+        run: |
+          args=()
+          if [ -n "$COMPANY_KEY" ]; then args+=(--company-key "$COMPANY_KEY"); fi
+          if [ "$DISCOVER_ONLY" = "true" ]; then args+=(--discover-only); fi
+          uv run --python 3.13 python -m src.jobs ${args[@]+"${args[@]}"}

@@ -101,6 +101,18 @@ Exclusion rules (unrelated):
 product.
   - Sports, media, restaurants, biotech, climate hardware, generic DevTools.
   - Cybersecurity or data platforms with no finance-specific product or FI focus.
+  - General-purpose AI/LLM labs, foundation-model companies, and AI compute or \
+infrastructure providers, unless the product itself is built for financial \
+institutions. Finance appearing as one example use case among many does NOT make \
+a company ai_fintech or enabler.
+
+Identify the RIGHT company first. Many names are shared by unrelated companies \
+(for example "Kraken" is both a crypto exchange and a utility-software company). \
+The article description, location, round and investors tell you which one is \
+meant. If search results describe a different company with the same name, ignore \
+them and search again with more specific terms. When the article and the search \
+snippets conflict, trust the article. Only claim a finance focus that the article \
+or the search results actually state; never infer one.
 
 When search evidence is mixed but a finance use case is real and material, \
 choose enabler or ai_fintech — do not mark unrelated. After you have enough \
@@ -142,6 +154,17 @@ class TavilySearch:
         ]
         blob = " ".join(parts).strip()
         return blob[:1200] if blob else "No results found."
+
+
+def _disambiguate(query: str, location: str, description: str, limit: int = 380) -> str:
+    """Append the article's own context to a search query.
+
+    The model often searches only the company name, which finds the wrong
+    company when the name is shared (e.g. Kraken). The article's location and
+    description pin down which one is meant.
+    """
+    hint = re.sub(r"\s+", " ", f"{location or ''} {description or ''}").strip()[:160]
+    return f"{query} {hint}".strip()[:limit]
 
 
 def _parse_label(content: str) -> dict | None:
@@ -186,7 +209,7 @@ def _finalize_label(
     user = (
         f"Company: {company}\n"
         f"Location: {location or 'unknown'}\n"
-        f"Article description: {description or '(none)'}\n"
+        f"Article details: {description or '(none)'}\n"
     )
     if search_snippets:
         user += f"\nWeb search snippets:\n{search_snippets}\n"
@@ -232,7 +255,7 @@ def _classify_one(
     user = (
         f'Company: {company}\n'
         f'Location: {location or "unknown"}\n'
-        f'Article description: {description or "(none)"}\n\n'
+        f'Article details: {description or "(none)"}\n\n'
         f'Use web_search if needed, then classify.'
     )
     messages: list[dict] = [
@@ -276,7 +299,7 @@ def _classify_one(
                 if name == "web_search":
                     query = str(args.get("query") or f"{company} company what does it do")
                     log.debug("tool web_search(%r)", query)
-                    result = searcher.search(query)
+                    result = searcher.search(_disambiguate(query, location, description))
                 else:
                     result = f"Unknown tool: {name}"
                 messages.append(
@@ -349,6 +372,19 @@ def _classify_companies(
     return out
 
 
+def _article_context(d: dict) -> str:
+    """Description plus round and investors, so the model knows which company this is."""
+    parts = [(d.get("description") or "").strip()]
+    round_bits = " ".join(
+        b for b in (str(d.get("stage") or "").strip(), str(d.get("amount_raw") or "").strip()) if b
+    )
+    if round_bits:
+        parts.append(f"Round: {round_bits}.")
+    if d.get("investors"):
+        parts.append(f"Investors: {str(d['investors']).strip()}.")
+    return " ".join(p for p in parts if p)[:600]
+
+
 def enrich_all(deals: list[dict], cfg: dict, db: Backend) -> list[dict]:
     """Classify each deal via web_search tool; drop unrelated companies.
 
@@ -382,7 +418,7 @@ def enrich_all(deals: list[dict], cfg: dict, db: Backend) -> list[dict]:
             continue
         seen.add(key)
         to_classify.append(
-            (key, d["company"], d.get("location", "") or "", d.get("description", "") or "")
+            (key, d["company"], d.get("location", "") or "", _article_context(d))
         )
 
     labels = _classify_companies(to_classify, extractor, searcher, db, delay)
