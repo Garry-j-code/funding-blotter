@@ -7,8 +7,16 @@ function adminHeaders(): HeadersInit {
   return secret ? { Authorization: `Bearer ${secret}` } : {};
 }
 
-export async function fetchDeals(windowDays = 30): Promise<Deal[]> {
-  const resp = await fetch(`/api/deals?window_days=${windowDays}`);
+export interface DealQuery {
+  /** Inclusive YYYY-MM-DD bounds. Either may be empty. Take precedence over windowDays. */
+  from?: string;
+  to?: string;
+  /** 0 = all time. Ignored when from/to are set. */
+  windowDays?: number;
+}
+
+async function getJson<T>(path: string, what: string): Promise<T> {
+  const resp = await fetch(path);
   if (!resp.ok) {
     const body = await resp.text();
     let detail = body;
@@ -17,9 +25,26 @@ export async function fetchDeals(windowDays = 30): Promise<Deal[]> {
     } catch {
       /* use raw body */
     }
-    throw new Error(`Failed to load deals (${resp.status}): ${detail.slice(0, 200)}`);
+    throw new Error(`Failed to load ${what} (${resp.status}): ${detail.slice(0, 200)}`);
   }
   return resp.json();
+}
+
+export async function fetchDeals(query: DealQuery = {}): Promise<Deal[]> {
+  const params = new URLSearchParams();
+  if (query.from) params.set("from", query.from);
+  if (query.to) params.set("to", query.to);
+  if (!query.from && !query.to) params.set("window_days", String(query.windowDays ?? 30));
+  return getJson<Deal[]>(`/api/deals?${params}`, "deals");
+}
+
+export interface MonthInfo {
+  month: string; // YYYY-MM
+  count: number;
+}
+
+export function fetchMonths(): Promise<MonthInfo[]> {
+  return getJson<MonthInfo[]>("/api/deals?months=1", "months");
 }
 
 export async function removeDeal(companyKey: string, company: string): Promise<void> {
@@ -90,23 +115,52 @@ export function sectorLabel(s?: string) {
   return (s && SECTOR[s]) || "";
 }
 
+/** Stage labels always offered in the stage dropdown, in display order. */
+export const BASE_STAGES = [
+  "Seed",
+  "Series A",
+  "Series B",
+  "Series C",
+  "Series D",
+  "Series E",
+  "Series F",
+  "Series G",
+  "Series H",
+];
+
+/** Collapse the free-text stage into one canonical label for filtering. */
+export function stageKey(stage?: string): string {
+  const s = (stage || "").trim();
+  if (!s) return "Undisclosed";
+  const low = s.toLowerCase();
+  if (/^pre[\s-]?seed/.test(low)) return "Pre-Seed";
+  if (/^seed/.test(low)) return "Seed";
+  if (/^pre[\s-]?(series\s*)?a\b/.test(low)) return "Pre-A";
+  const series = low.match(/^series\s+([a-z])\b/);
+  if (series) return `Series ${series[1].toUpperCase()}`;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function filterDeals(
   deals: Deal[],
   mode: string,
   q: string,
-  date: string,
+  from: string,
+  to: string,
+  stage = "",
 ): Deal[] {
   const query = q.toLowerCase();
   const OVER_5M = 5_000_000;
   return deals.filter((d) => {
     if (mode === "priority" && !d.priority) return false;
     if (mode === "disclosed" && d.amount_usd == null) return false;
-    if (mode === "early" && !/seed|series a/i.test(d.stage || "")) return false;
+    if (stage && stageKey(d.stage) !== stage) return false;
     // Over $5M: keep undisclosed (n/d) and disclosed amounts strictly above $5M.
     if (mode === "over5m" && d.amount_usd != null && d.amount_usd <= OVER_5M) {
       return false;
     }
-    if (date && d.published_at !== date) return false;
+    if (from && d.published_at < from) return false;
+    if (to && d.published_at > to) return false;
     if (
       query &&
       ![d.company, d.description, d.investors, d.location, d.stage]

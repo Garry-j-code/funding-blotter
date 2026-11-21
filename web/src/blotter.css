@@ -60,6 +60,10 @@ body {
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .chip:hover { border-color: var(--ink); color: var(--ink); }
+.chip-select { font-family: 'IBM Plex Mono', monospace; max-width: 100%; }
+.chip-select.on {
+  background: var(--ink); border-color: var(--ink); color: var(--ledger);
+}
 .chip[aria-pressed="true"] {
   background: var(--ink); border-color: var(--ink); color: var(--ledger);
 }
@@ -118,6 +122,51 @@ body {
 .date-clear:hover { border-color: var(--ink); color: var(--ink); }
 .date-clear:disabled { opacity: 0.35; cursor: default; }
 .date-clear:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
+
+/* Date range picker */
+.rp { position: relative; }
+.rp-trigger {
+  cursor: pointer; text-align: left; min-width: 200px; white-space: nowrap;
+  color: var(--muted);
+}
+.rp-trigger.set { color: var(--ink); }
+.rp-trigger:hover { border-color: var(--ink); }
+.rp-trigger:focus-visible, .rp-day:focus-visible, .rp-nav:focus-visible {
+  outline: 2px solid var(--flag); outline-offset: 2px;
+}
+.rp-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30;
+  width: 288px; max-width: calc(100vw - 32px); padding: 12px;
+  background: var(--card); border: 1px solid var(--ink);
+  box-shadow: 0 8px 24px rgba(23, 26, 22, 0.16);
+}
+.rp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.rp-title {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.rp-nav {
+  width: 28px; height: 28px; border: 1px solid var(--rule); background: transparent;
+  color: var(--ink); cursor: pointer; font-size: 16px; line-height: 1;
+}
+.rp-nav:hover { border-color: var(--ink); }
+.rp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.rp-dow span {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-align: center;
+  color: var(--muted); padding: 4px 0;
+}
+.rp-day {
+  height: 34px; border: 1px solid transparent; background: transparent; color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer;
+}
+.rp-day:hover { border-color: var(--ink); }
+.rp-day.today { text-decoration: underline; text-underline-offset: 3px; }
+.rp-day.in { background: var(--rule); }
+.rp-day.edge { background: var(--ink); color: var(--ledger); }
+.rp-hint {
+  margin-top: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+  color: var(--muted);
+}
 
 /* Date groups */
 .daybar {

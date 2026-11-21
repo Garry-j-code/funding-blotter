@@ -18,13 +18,26 @@ export default async (req: Request, _context: Context) => {
       url.searchParams.get("company_key");
 
     if (req.method === "GET" && !companyKey) {
-      const windowDays = parseInt(url.searchParams.get("window_days") || "30", 10);
+      const parsedWindow = parseInt(url.searchParams.get("window_days") || "30", 10);
+      // window_days=0 (or invalid) means "all time": no date cutoff.
+      const windowDays = Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : 0;
       const publishedAt = url.searchParams.get("published_at") || "";
       const q = (url.searchParams.get("q") || "").toLowerCase();
 
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - windowDays);
-      const cutoffIso = cutoff.toISOString().slice(0, 10);
+      // Explicit inclusive date range (YYYY-MM-DD). Takes precedence over window_days.
+      const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+      const fromParam = url.searchParams.get("from") || "";
+      const toParam = url.searchParams.get("to") || "";
+      const fromIso = ISO_DATE.test(fromParam) ? fromParam : "";
+      const toIso = ISO_DATE.test(toParam) ? toParam : "";
+      const hasRange = Boolean(fromIso || toIso);
+
+      let cutoffIso = "";
+      if (!hasRange && windowDays > 0) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - windowDays);
+        cutoffIso = cutoff.toISOString().slice(0, 10);
+      }
 
       const sb = supabaseAdmin();
       const { data: blocked, error: blockedErr } = await sb
@@ -34,20 +47,55 @@ export default async (req: Request, _context: Context) => {
 
       const blockedSet = new Set((blocked || []).map((r) => r.company_key));
 
-      let query = sb
-        .from("deals")
-        .select("*")
-        .gte("published_at", cutoffIso)
-        .order("published_at", { ascending: false });
-
-      if (publishedAt) {
-        query = query.eq("published_at", publishedAt);
+      // ?months=1 -> months that have (non-blocked) deals, newest first.
+      if (url.searchParams.get("months")) {
+        const counts = new Map<string, number>();
+        for (let from = 0; ; from += 1000) {
+          const { data: page, error } = await sb
+            .from("deals")
+            .select("published_at, company_key")
+            .order("id", { ascending: true })
+            .range(from, from + 999);
+          if (error) return json({ error: error.message }, 500);
+          for (const r of page || []) {
+            if (!r.published_at || blockedSet.has(r.company_key)) continue;
+            const m = String(r.published_at).slice(0, 7);
+            counts.set(m, (counts.get(m) || 0) + 1);
+          }
+          if (!page || page.length < 1000) break;
+        }
+        const months = [...counts.entries()]
+          .sort((x, y) => y[0].localeCompare(x[0]))
+          .map(([month, count]) => ({ month, count }));
+        return json(months);
       }
 
-      const { data, error } = await query;
-      if (error) return json({ error: error.message }, 500);
+      // Supabase caps each response at ~1000 rows, so page through the results.
+      // `id` is a tiebreaker so pages are stable.
+      const PAGE = 1000;
+      const data: Record<string, any>[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let query = sb
+          .from("deals")
+          .select("*")
+          .order("published_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE - 1);
+        if (hasRange) {
+          if (fromIso) query = query.gte("published_at", fromIso);
+          if (toIso) query = query.lte("published_at", toIso);
+        } else if (cutoffIso) {
+          query = query.gte("published_at", cutoffIso);
+        }
+        if (publishedAt) query = query.eq("published_at", publishedAt);
 
-      let rows = (data || []).filter((d) => !blockedSet.has(d.company_key));
+        const { data: page, error } = await query;
+        if (error) return json({ error: error.message }, 500);
+        data.push(...(page || []));
+        if (!page || page.length < PAGE) break;
+      }
+
+      let rows = data.filter((d) => !blockedSet.has(d.company_key));
       rows.sort((a, b) => {
         const pub = (b.published_at || "").localeCompare(a.published_at || "");
         if (pub !== 0) return pub;
