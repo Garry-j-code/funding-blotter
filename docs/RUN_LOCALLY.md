@@ -92,6 +92,23 @@ Prefer `--backend sqlite` for experiments. A local SQLite run does **not** chang
 what the web app shows, because the web app reads Supabase. FinSMEs blocks some
 networks, such as GitHub's cloud IPs; run it from your own machine.
 
+## Careers (open roles on each card)
+
+Finds each company's public job board (Ashby, Greenhouse, Lever, Workable) and keeps its
+Forward Deployed Engineer / AI Engineer / Product Engineer / AI Product Engineer roles in sync.
+No LLM and no API keys beyond Supabase.
+
+```bash
+uv run pytest -q                                              # offline tests
+uv run python -m src.jobs --dry-run --report /tmp/careers.csv # report only, writes nothing
+uv run python -m src.jobs                                     # discover boards + sync roles
+uv run python -m src.jobs --company-key hanoverpark           # just one company
+```
+
+Which titles count is configured under `jobs:` in `config.yaml`. In production the sync runs
+daily from `.github/workflows/jobs.yml` (also startable by hand from the Actions tab).
+Admins edit a company's careers URL from the **Careers** panel on its card. If the URL is the company's own careers page, the next run looks on it for a linked job board or standard job-posting data (otherwise the link is just shown, with no roles). Re-check one company with `uv run python -m src.jobs --company-key KEY`.
+
 ## Troubleshooting
 
 | Symptom | Fix |

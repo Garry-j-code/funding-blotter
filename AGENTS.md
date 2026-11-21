@@ -29,11 +29,21 @@ Two halves:
 | `src/supabase_store.py` | Supabase (Postgres) backend — production |
 | `src/render.py` | Legacy static `docs/index.html` + `data/deals.csv` |
 | `src/backfill.py` | Recover a date range of missed days |
+| `src/jobs.py` | Careers: find each company's public job board, sync matching open roles (Supabase only) |
+| `netlify/functions/careers.ts` | `GET /api/careers`; admin `POST /api/careers`, `PUT` / `DELETE /api/careers/:company_key` |
+| `web/src/Careers.tsx` | The "Careers" panel on each card |
+| `web/src/Jobs.tsx` | The Jobs page (`#/jobs`): all open roles, plus the admin "add a careers URL" form |
+| `tests/` | Offline pytest suite for `src/jobs.py` (no network, no database) |
+| `.github/workflows/jobs.yml` | Daily careers sync (public APIs, normal GitHub runner) |
 | `web/src/` | React SPA (`App.tsx`, `api.ts`, `types.ts`, `blotter.css`) |
 | `netlify/functions/` | `deals.ts`, `fetch.ts`, `health.ts`, shared `_lib.ts` |
-| `supabase/migrations/` | Postgres schema |
 | `config.yaml` | Sources, models, filters, paths |
 | `docs/` | Setup guides plus legacy GitHub Pages output |
+
+**Database schema:** the Supabase tables were created by hand (SQL editor) and the migration files are not kept in
+the repo. Column names are in `src/supabase_store.py`; the careers tables are documented in
+`docs/PLAN_CAREERS.md` section 3. The original `deals` schema is in git history
+(`git show f6e7c52:supabase/migrations/001_initial.sql`).
 
 ## Commands
 
@@ -59,8 +69,10 @@ npm --prefix web run dev          # Vite dev server
 npm --prefix web run build        # output: web/dist
 ```
 
-There is **no test suite**. Verify changes with `--probe`, `--dry-run`, and
-`--no-llm` before running anything that writes or spends API quota. For TS
+Careers code has an offline test suite: `uv run pytest -q`. The rest of the pipeline has
+no tests, so verify changes with `--probe`, `--dry-run`, and `--no-llm` before running
+anything that writes or spends API quota. Careers dry run: `uv run python -m src.jobs
+--dry-run --report /tmp/careers.csv` (writes nothing). For TS
 changes, run `npx tsc -p tsconfig.functions.json --noEmit` and build `web/`.
 
 ## Browser / UI testing
@@ -94,6 +106,22 @@ These are load-bearing invariants (see README "Gotchas"):
    `supabase_store.py`.
 9. Preserve the amount filter behavior: undisclosed-amount deals stay visible
    under the Over/Under $5M blotter filters.
+10. **Careers: a failed fetch never closes jobs.** Only a successful fetch may close
+    roles, and a board that had open roles and returns nothing is held for one run first.
+11. **Careers: a URL with `source = manual` is never overwritten by discovery.**
+12. **Careers: unverified guesses are admin-only.** `GET /api/careers` must never send
+    them to visitors. Admin writes need `ADMIN_SECRET`, and URLs are validated
+    (http/https only, no credentials). Keep `_careers.ts` and `jobs.py` URL logic in step.
+13. Careers roles come from the public job-board APIs (Ashby, Greenhouse, Lever, Workable).
+    The only other thing read is the one careers URL an admin saved for a company: it is
+    fetched once per run (public hosts only, robots.txt respected) and used only to find a
+    linked job board or schema.org `JobPosting` data. No LinkedIn or other scraping, no LLM calls.
+14. **Jobs page companies:** an admin can add a company that is not in the blotter (a manual
+    `company_careers` row with no matching deal). `company_key` must come from the same rule in
+    `src/store.py` and `_careers.ts` (`tests/fixtures/company_keys.json` holds shared examples).
+    A name whose key already exists in the blotter is rejected (409), never merged.
+15. Page every Supabase list query (1000-row cap). `company_key` strips words like
+    "Labs", so two companies can share a key (ORO Labs vs Oro); verify before trusting.
 
 ## Secrets and safety
 
@@ -109,6 +137,9 @@ These are load-bearing invariants (see README "Gotchas"):
 
 ## CI / deploy
 
+- `.github/workflows/jobs.yml` is the exception: it runs **daily on `ubuntu-latest`** because
+  the job-board APIs are public. Scheduled workflows are disabled after 60 days without
+  repository activity (public repos), so any commit resets that.
 - `.github/workflows/daily.yml` is **manual-trigger only** (`workflow_dispatch`)
   and runs on **self-hosted** Mac/Windows runners — FinSMEs returns 403 to
   GitHub's cloud IPs. Don't switch it to `ubuntu-latest`.

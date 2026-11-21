@@ -341,6 +341,16 @@ Manual trigger only. Full install: [docs/SETUP_RUNNER.md](docs/SETUP_RUNNER.md).
 
 ---
 
+## Careers (open roles)
+
+Each company card has a **Careers** option showing its careers URL and any open Forward Deployed
+Engineer / AI Engineer / Product Engineer / AI Product Engineer roles, pulled daily from the
+public Ashby, Greenhouse, Lever and Workable job-board APIs (`src/jobs.py`,
+`.github/workflows/jobs.yml`). Admins can edit the URL. Setup and commands:
+[docs/RUN_LOCALLY.md](docs/RUN_LOCALLY.md); design: [docs/PLAN_CAREERS.md](docs/PLAN_CAREERS.md).
+
+---
+
 ## Known limitations
 
 - **`published_at` is coverage date**, not necessarily the day the round closed.
